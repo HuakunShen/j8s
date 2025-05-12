@@ -7,17 +7,21 @@ import type { IService } from "../src/interface";
 
 const io: DestroyableIoInterface = new WorkerChildIO();
 
-class MathService implements IService {
-  name = "mathService";
+class LoggingService implements IService {
+  name = "loggingService";
   async start(): Promise<void> {
-    console.log("mathService started");
+    console.log("loggingService started");
+    let count = 0;
+    setInterval(() => {
+      console.log("loggingService log", count++);
+    }, 1000);
   }
   async stop(): Promise<void> {
-    console.log("mathService stopped");
+    console.log("loggingService stopped");
   }
 }
 
 const rpc = new RPCChannel<IService, object, DestroyableIoInterface>(io, {
-  expose: new MathService(),
+  expose: new LoggingService(),
 });
 const api = rpc.getAPI();

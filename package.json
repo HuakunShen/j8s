@@ -10,6 +10,8 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@kunkun/kkrpc": "npm:@jsr/kunkun__kkrpc"
+    "@kunkun/kkrpc": "npm:@jsr/kunkun__kkrpc",
+    "citty": "^0.1.6",
+    "cron": "^4.3.0"
   }
 }

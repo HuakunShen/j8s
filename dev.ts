@@ -6,7 +6,7 @@ import {
 import type { IService } from "./src/interface";
 
 const worker = new Worker(
-  new URL("./examples/mathService.ts", import.meta.url).href,
+  new URL("./examples/logService.ts", import.meta.url).href,
   { type: "module" }
 );
 const io = new WorkerParentIO(worker);
