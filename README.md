@@ -3,8 +3,8 @@
 > A JS service orchestration framework.
 
 > Ideally in a micro service architecture, each service should have own process or even container using tools like pm2 or k8s.
-> For lightweight tasks it's not necessary to run multiple containers. 
-> Running multiple containers on Cloud providers like AWS using Fargate is also expensive. 
+> For lightweight tasks it's not necessary to run multiple containers.
+> Running multiple containers on Cloud providers like AWS using Fargate is also expensive.
 > So I want to write a orchestrator for running multiple JS services in a single process, but with multiple worker thread.
 
 ## Features
