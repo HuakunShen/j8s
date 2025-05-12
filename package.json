@@ -8,5 +8,8 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@kunkun/kkrpc": "npm:@jsr/kunkun__kkrpc"
   }
 }
