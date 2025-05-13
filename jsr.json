@@ -1,0 +1,6 @@
+{
+  "name": "@hk/j8s",
+  "version": "0.0.1",
+  "license": "MIT",
+  "exports": "./index.ts"
+}

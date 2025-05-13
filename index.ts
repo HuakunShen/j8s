@@ -11,7 +11,7 @@ export type {
 
 // Export base classes
 export { BaseService } from "./src/BaseService";
-export { ServiceManager } from "./src/serviceManager";
+export { ServiceManager } from "./src/ServiceManager";
 export { WorkerService } from "./src/WorkerService";
 export type { WorkerServiceOptions } from "./src/WorkerService";
 
@@ -21,7 +21,7 @@ import { WorkerService, type WorkerServiceOptions } from "./src/WorkerService";
 export function createWorkerService(
   name: string,
   workerPath: string | URL,
-  options?: Partial<WorkerServiceOptions>,
+  options?: Partial<WorkerServiceOptions>
 ) {
   const fullOptions: WorkerServiceOptions = {
     workerURL: workerPath,
