@@ -78,7 +78,19 @@ serviceManager.addService(backupService, {
 });
 
 // Create the REST API
-const app = createServiceManagerAPI(serviceManager);
+const app = createServiceManagerAPI(serviceManager, {
+  openapi: {
+    enabled: true,
+    info: {
+      title: "Demo Service Manager API",
+      version: "1.0.0",
+    },
+  },
+  scalar: {
+    enabled: true,
+    theme: "deepSpace",
+  },
+});
 
 // Start the HTTP server
 const port = 3000;

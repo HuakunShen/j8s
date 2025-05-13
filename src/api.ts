@@ -149,7 +149,7 @@ export function createServiceManagerAPI(
 
   // List all services
   app.get(
-    "/services",
+    "/api/services",
     describeRoute({
       description: "List all registered services",
       responses: {
@@ -176,7 +176,7 @@ export function createServiceManagerAPI(
 
   // Get service details
   app.get(
-    "/services/:name",
+    "/api/services/:name",
     describeRoute({
       description: "Get details for a specific service",
       responses: {
@@ -216,7 +216,7 @@ export function createServiceManagerAPI(
 
   // Start a service
   app.post(
-    "/services/:name/start",
+    "/api/services/:name/start",
     describeRoute({
       description: "Start a specific service",
       responses: {
@@ -251,7 +251,7 @@ export function createServiceManagerAPI(
 
   // Stop a service
   app.post(
-    "/services/:name/stop",
+    "/api/services/:name/stop",
     describeRoute({
       description: "Stop a specific service",
       responses: {
@@ -286,7 +286,7 @@ export function createServiceManagerAPI(
 
   // Restart a service
   app.post(
-    "/services/:name/restart",
+    "/api/services/:name/restart",
     describeRoute({
       description: "Restart a specific service",
       responses: {
@@ -321,7 +321,7 @@ export function createServiceManagerAPI(
 
   // Remove a service
   app.delete(
-    "/services/:name",
+    "/api/services/:name",
     describeRoute({
       description: "Remove a specific service",
       responses: {
@@ -356,7 +356,7 @@ export function createServiceManagerAPI(
 
   // Health check for a specific service
   app.get(
-    "/services/:name/health",
+    "/api/services/:name/health",
     describeRoute({
       description: "Get health status for a specific service",
       responses: {
@@ -391,7 +391,7 @@ export function createServiceManagerAPI(
 
   // Health check for all services
   app.get(
-    "/health",
+    "/api/health",
     describeRoute({
       description: "Get health status for all services",
       responses: {
@@ -426,7 +426,7 @@ export function createServiceManagerAPI(
 
   // Start all services
   app.post(
-    "/services/start-all",
+    "/api/services/start-all",
     describeRoute({
       description: "Start all registered services",
       responses: {
@@ -456,7 +456,7 @@ export function createServiceManagerAPI(
 
   // Stop all services
   app.post(
-    "/services/stop-all",
+    "/api/services/stop-all",
     describeRoute({
       description: "Stop all registered services",
       responses: {
