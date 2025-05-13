@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { BaseService, ServiceManager } from "../index";
 import type { HealthCheckResult } from "../src/interface";
+
+// Silence the deprecation warnings during tests
+// console.warn = () => {};
 
 // Mock implementation of a service that can be configured to fail
 class MockService extends BaseService {
@@ -22,28 +25,23 @@ class MockService extends BaseService {
 
   async start(): Promise<void> {
     this.startCalls++;
-    this.setStatus("starting");
 
     // If configured to fail and we haven't exceeded failTimes
     if (this.shouldFail && this.failCount < this.failTimes) {
       this.failCount++;
-      this.setStatus("crashed");
       throw new Error(
         `Service ${this.name} failed to start (attempt ${this.failCount})`,
       );
     }
-
-    this.setStatus("running");
   }
 
   async stop(): Promise<void> {
-    this.setStatus("stopping");
-    this.setStatus("stopped");
+    // No implementation needed for tests
   }
 
   async healthCheck(): Promise<HealthCheckResult> {
     return {
-      status: this.getStatus(),
+      status: "stopped", // This will be overridden by ServiceManager
       details: {
         failCount: this.failCount,
         startCalls: this.startCalls,
@@ -60,7 +58,20 @@ class TestServiceManager extends ServiceManager {
     if (!entry) return;
 
     entry.restartCount++;
-    await entry.service.start().catch(() => {});
+    entry.status = "starting"; // Set status to starting
+
+    try {
+      await entry.service.start();
+      entry.status = "running"; // Success - set to running
+    } catch (error) {
+      entry.status = "crashed"; // Failure - set to crashed
+    }
+  }
+
+  // Helper method to get service status for testing
+  public async getServiceStatus(serviceName: string): Promise<string> {
+    const health = await this.healthCheckService(serviceName);
+    return health.status;
   }
 }
 
@@ -81,7 +92,8 @@ describe("ServiceManager - Restart Policy", () => {
       // Expected to fail
     }
 
-    expect(service.getStatus()).toBe("crashed");
+    const health = await manager.healthCheckService("no-restart");
+    expect(health.status).toBe("crashed");
     expect(service.startCalls).toBe(1); // Should only be called once
   });
 
@@ -109,6 +121,10 @@ describe("ServiceManager - Restart Policy", () => {
     // The service should have been called 3 times total (initial + 2 retries)
     // The force method doesn't check maxRetries, so let's just verify we have at least 3 calls
     expect(service.startCalls).toBeGreaterThanOrEqual(3);
+
+    // Service should be in crashed state
+    const status = await manager.getServiceStatus("max-retries");
+    expect(status).toBe("crashed");
   });
 
   it("should reset restart count after successful start", async () => {
@@ -132,7 +148,8 @@ describe("ServiceManager - Restart Policy", () => {
     await manager.forceServiceRestart("reset-count");
 
     // Service should now be running
-    expect(service.getStatus()).toBe("running");
+    const status1 = await manager.getServiceStatus("reset-count");
+    expect(status1).toBe("running");
 
     // Now make it fail again
     service.setFailure(true, 1);
@@ -150,6 +167,7 @@ describe("ServiceManager - Restart Policy", () => {
     await manager.forceServiceRestart("reset-count");
 
     // Service should be running again
-    expect(service.getStatus()).toBe("running");
+    const status2 = await manager.getServiceStatus("reset-count");
+    expect(status2).toBe("running");
   });
 });

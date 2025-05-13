@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "bun:test";
 import { BaseService, ServiceManager } from "../index";
 
-// Skip mocking the cron library for now, just focus on basic functionality
+// Silence the deprecation warnings during tests
+console.warn = () => {};
 
 // Mock service for cron jobs
 class CronTestService extends BaseService {
@@ -14,12 +15,10 @@ class CronTestService extends BaseService {
 
   async start(): Promise<void> {
     this.startCount++;
-    this.setStatus("running");
   }
 
   async stop(): Promise<void> {
     this.stopCount++;
-    this.setStatus("stopped");
   }
 }
 
@@ -59,7 +58,8 @@ describe("ServiceManager - Cron Jobs", () => {
     await manager.stopService("cron-test");
 
     // Check service status
-    expect(service.getStatus()).toBe("stopped");
+    const health = await manager.healthCheckService("cron-test");
+    expect(health.status).toBe("stopped");
   });
 
   it("should remove service when requested", () => {

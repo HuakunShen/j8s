@@ -4,6 +4,7 @@ import type {
   IServiceManager,
   ServiceConfig,
   RestartPolicy,
+  ServiceStatus,
 } from "./interface";
 import { CronJob } from "cron";
 
@@ -13,6 +14,7 @@ interface ServiceEntry {
   restartCount: number;
   restartTimer?: NodeJS.Timeout;
   cronJob?: CronJob;
+  status: ServiceStatus;
 }
 
 export class ServiceManager implements IServiceManager {
@@ -31,6 +33,7 @@ export class ServiceManager implements IServiceManager {
       service,
       config,
       restartCount: 0,
+      status: "stopped",
     };
 
     this.serviceMap.set(service.name, serviceEntry);
@@ -66,8 +69,11 @@ export class ServiceManager implements IServiceManager {
       throw new Error(`Service '${serviceName}' not found`);
     }
 
+    entry.status = "starting";
+
     try {
       await entry.service.start();
+      entry.status = "running";
       entry.restartCount = 0;
     } catch (error) {
       await this.handleServiceFailure(entry, error);
@@ -91,7 +97,15 @@ export class ServiceManager implements IServiceManager {
       entry.cronJob.stop();
     }
 
-    await entry.service.stop();
+    entry.status = "stopping";
+
+    try {
+      await entry.service.stop();
+      entry.status = "stopped";
+    } catch (error) {
+      console.error(`Error stopping service '${serviceName}':`, error);
+      entry.status = "crashed";
+    }
   }
 
   public async restartService(serviceName: string): Promise<void> {
@@ -107,7 +121,13 @@ export class ServiceManager implements IServiceManager {
       throw new Error(`Service '${serviceName}' not found`);
     }
 
-    return await entry.service.healthCheck();
+    const serviceHealth = await entry.service.healthCheck();
+
+    // Override the status with our managed status
+    return {
+      ...serviceHealth,
+      status: entry.status, // Use our managed status, not the service's
+    };
   }
 
   public async startAllServices(): Promise<void> {
@@ -141,7 +161,8 @@ export class ServiceManager implements IServiceManager {
     const results: Record<string, HealthCheckResult> = {};
 
     for (const [name, entry] of this.serviceMap.entries()) {
-      results[name] = await entry.service.healthCheck();
+      // Call healthCheckService for each service
+      results[name] = await this.healthCheckService(name);
     }
 
     return results;
@@ -156,6 +177,9 @@ export class ServiceManager implements IServiceManager {
     const maxRetries = config.maxRetries || 3;
 
     console.error(`Service '${service.name}' failed: ${error}`);
+
+    // Update service status
+    entry.status = "crashed";
 
     // Don't restart if policy is 'no'
     if (policy === "no") {
@@ -191,9 +215,11 @@ export class ServiceManager implements IServiceManager {
     entry.restartTimer = setTimeout(async () => {
       entry.restartCount++;
       entry.restartTimer = undefined;
+      entry.status = "starting";
 
       try {
         await service.start();
+        entry.status = "running";
       } catch (err) {
         await this.handleServiceFailure(entry, err);
       }
@@ -216,20 +242,25 @@ export class ServiceManager implements IServiceManager {
       schedule,
       async () => {
         try {
+          entry.status = "starting";
           // Start the service, which should auto-terminate if configured that way
           await service.start();
+          entry.status = "running";
 
           // If a timeout is specified, ensure the service stops
           if (entry.config.cronJob?.timeout) {
             setTimeout(async () => {
               try {
-                if (service.getStatus() !== "stopped") {
+                if (entry.status === "running") {
+                  entry.status = "stopping";
                   await service.stop();
+                  entry.status = "stopped";
                 }
               } catch (error) {
                 console.error(
                   `Error stopping service '${service.name}' after timeout: ${error}`,
                 );
+                entry.status = "crashed";
               }
             }, entry.config.cronJob.timeout);
           }
@@ -237,6 +268,7 @@ export class ServiceManager implements IServiceManager {
           console.error(
             `Error running cron job for service '${service.name}': ${error}`,
           );
+          entry.status = "crashed";
         }
       },
       null, // onComplete

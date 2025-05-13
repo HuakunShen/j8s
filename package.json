@@ -1,14 +1,11 @@
 {
   "name": "j8s",
+  "version": "0.0.1",
   "module": "index.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "format": "prettier --write .",
-    "test": "vitest run --globals",
-    "test:watch": "vitest --globals",
-    "test:restart": "vitest run --globals __tests__/restart-policy.test.ts",
-    "test:cron": "vitest run --globals __tests__/cron-job.test.ts"
+    "format": "prettier --write ."
   },
   "devDependencies": {
     "@types/bun": "latest",
