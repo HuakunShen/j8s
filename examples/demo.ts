@@ -1,9 +1,11 @@
+import { serve } from "@hono/node-server";
 import {
   BaseService,
   ServiceManager,
   createWorkerService,
   type HealthCheckResult,
 } from "../index";
+import { createServiceManagerAPI } from "../api";
 
 // Create a simple service that runs in the main thread
 class SimpleService extends BaseService {
@@ -15,7 +17,6 @@ class SimpleService extends BaseService {
 
   async start(): Promise<void> {
     console.log(`Starting ${this.name}...`);
-    this.setStatus("starting");
 
     // Simulate initialization
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -24,13 +25,11 @@ class SimpleService extends BaseService {
       console.log(`${this.name} is running...`);
     }, 5000);
 
-    this.setStatus("running");
     console.log(`${this.name} started successfully`);
   }
 
   async stop(): Promise<void> {
     console.log(`Stopping ${this.name}...`);
-    this.setStatus("stopping");
 
     if (this.intervalId) {
       clearInterval(this.intervalId);
@@ -40,7 +39,6 @@ class SimpleService extends BaseService {
     // Simulate cleanup
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    this.setStatus("stopped");
     console.log(`${this.name} stopped successfully`);
   }
 
@@ -67,22 +65,19 @@ class CronService extends BaseService {
 
   async start(): Promise<void> {
     console.log(
-      `Running cron job ${this.name} - ${this.taskName} at ${new Date().toISOString()}`,
+      `Running cron job ${this.name} - ${this.taskName} at ${new Date().toISOString()}`
     );
-    this.setStatus("running");
 
     // Simulate work
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     console.log(
-      `Cron job ${this.name} - ${this.taskName} completed at ${new Date().toISOString()}`,
+      `Cron job ${this.name} - ${this.taskName} completed at ${new Date().toISOString()}`
     );
-    this.setStatus("stopped");
   }
 
   async stop(): Promise<void> {
     console.log(`Stopping cron job ${this.name}...`);
-    this.setStatus("stopped");
   }
 }
 
@@ -100,7 +95,7 @@ async function runDemo() {
   const workerService = createWorkerService(
     "logging-service",
     new URL("./services/logService.ts", import.meta.url),
-    { autoTerminate: false },
+    { autoTerminate: false }
   );
   manager.addService(workerService, {
     restartPolicy: "on-failure",
@@ -128,7 +123,7 @@ async function runDemo() {
   // Add a cron job service that runs at specific times
   const notificationService = new CronService(
     "notification-service",
-    "Send notifications",
+    "Send notifications"
   );
   manager.addService(notificationService, {
     cronJob: {

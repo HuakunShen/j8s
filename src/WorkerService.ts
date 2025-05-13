@@ -21,6 +21,7 @@ export class WorkerService extends BaseService {
   private options: WorkerServiceOptions;
   private autoTerminating = false;
   private terminateTimeout: NodeJS.Timeout | null = null;
+  private workerStatus: ServiceStatus = "stopped";
 
   constructor(name: string, options: WorkerServiceOptions) {
     super(name);
@@ -32,23 +33,23 @@ export class WorkerService extends BaseService {
 
     this.worker = new Worker(
       this.options.workerURL,
-      this.options.workerOptions,
+      this.options.workerOptions
     );
     this.io = new WorkerParentIO(this.worker);
     this.rpc = new RPCChannel<object, IService, DestroyableIoInterface>(
       this.io,
-      {},
+      {}
     );
     this.api = this.rpc.getAPI();
 
     // Monitor worker termination
     this.worker.addEventListener("error", () => {
-      this.setStatus("crashed");
+      this.workerStatus = "crashed";
       this.cleanup();
     });
 
     this.worker.addEventListener("messageerror", () => {
-      this.setStatus("unhealthy");
+      this.workerStatus = "unhealthy";
     });
 
     // Handle clean worker exit
@@ -79,7 +80,7 @@ export class WorkerService extends BaseService {
 
   public async start(): Promise<void> {
     try {
-      this.setStatus("starting");
+      this.workerStatus = "starting";
       this.initWorker();
 
       if (!this.api) {
@@ -87,46 +88,44 @@ export class WorkerService extends BaseService {
       }
 
       await this.api.start();
-      this.setStatus("running");
+      this.workerStatus = "running";
 
       if (this.options.autoTerminate && this.io) {
         // For jobs that are meant to run and exit
-        this.setStatus("stopping");
+        this.workerStatus = "stopping";
         this.io.destroy();
         this.cleanup();
-        this.setStatus("stopped");
+        this.workerStatus = "stopped";
       }
     } catch (error) {
-      this.setStatus("crashed");
+      this.workerStatus = "crashed";
       this.cleanup();
       throw error;
     }
   }
 
   public async stop(): Promise<void> {
-    if (this.getStatus() === "stopped" || !this.api) {
+    if (this.workerStatus === "stopped" || !this.api) {
       return;
     }
 
     try {
-      this.setStatus("stopping");
+      this.workerStatus = "stopping";
       await this.api.stop();
       if (this.io) {
         this.io.destroy();
       }
       this.cleanup();
-      this.setStatus("stopped");
+      this.workerStatus = "stopped";
     } catch (error) {
-      this.setStatus("crashed");
+      this.workerStatus = "crashed";
       this.cleanup();
       throw error;
     }
   }
 
   public async healthCheck(): Promise<HealthCheckResult> {
-    const status = this.getStatus();
-
-    if (status === "running" && this.api) {
+    if (this.workerStatus === "running" && this.api) {
       try {
         // Try to get health check from the worker service itself
         return await this.api.healthCheck();
@@ -140,7 +139,7 @@ export class WorkerService extends BaseService {
 
     // Return our tracked status if we can't reach the worker
     return {
-      status,
+      status: this.workerStatus,
       details: { isWorker: true },
     };
   }

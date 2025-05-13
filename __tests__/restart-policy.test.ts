@@ -30,7 +30,7 @@ class MockService extends BaseService {
     if (this.shouldFail && this.failCount < this.failTimes) {
       this.failCount++;
       throw new Error(
-        `Service ${this.name} failed to start (attempt ${this.failCount})`,
+        `Service ${this.name} failed to start (attempt ${this.failCount})`
       );
     }
   }

@@ -1,5 +1,7 @@
 # j8s - JavaScript Service Orchestrator
 
+https://jsr.io/@hk/j8s
+
 A lightweight service orchestration framework for JavaScript/TypeScript. Run multiple services in a single process using worker threads.
 
 ## Features
@@ -10,19 +12,6 @@ A lightweight service orchestration framework for JavaScript/TypeScript. Run mul
 - Run services on a schedule (cron jobs)
 - Timeout support for services
 - Communication between worker and main thread using RPC
-
-## Installation
-
-```bash
-# Using npm
-npm install j8s
-
-# Using yarn
-yarn add j8s
-
-# Using bun
-bun add j8s
-```
 
 ## Basic Usage
 
@@ -66,7 +55,7 @@ import { ServiceManager, createWorkerService } from "j8s";
 const workerService = createWorkerService(
   "worker-service",
   new URL("./path/to/worker.ts", import.meta.url),
-  { autoTerminate: false },
+  { autoTerminate: false }
 );
 
 // Add the service with restart policy
@@ -158,6 +147,43 @@ manager.addService(backupService, {
   },
 });
 ```
+
+## REST API
+
+j8s includes a built-in REST API for managing services:
+
+```typescript
+import { serve } from "@hono/node-server";
+import { ServiceManager, createServiceManagerAPI } from "j8s";
+
+// Create and configure your service manager
+const manager = new ServiceManager();
+// Add services...
+
+// Create the REST API
+const app = createServiceManagerAPI(manager);
+
+// Start the HTTP server
+serve({
+  fetch: app.fetch,
+  port: 3000,
+});
+
+console.log("API server running on http://localhost:3000");
+```
+
+### Available Endpoints
+
+- `GET /services` - List all services
+- `GET /services/:name` - Get service details
+- `GET /services/:name/health` - Get health for a specific service
+- `POST /services/:name/start` - Start a service
+- `POST /services/:name/stop` - Stop a service
+- `POST /services/:name/restart` - Restart a service
+- `DELETE /services/:name` - Remove a service
+- `GET /health` - Get health for all services
+- `POST /services/start-all` - Start all services
+- `POST /services/stop-all` - Stop all services
 
 ## API Reference
 
