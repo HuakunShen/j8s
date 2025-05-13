@@ -4,6 +4,7 @@ import { describeRoute, openAPISpecs } from "hono-openapi";
 import * as v from "valibot";
 import { resolver, validator as vValidator } from "hono-openapi/valibot";
 import { Scalar } from "@scalar/hono-api-reference";
+import { createServiceManagerUI } from "./ui.tsx";
 
 // Define validation schemas
 const ServiceNameSchema = v.object(
@@ -114,6 +115,9 @@ export function createServiceManagerAPI(
   config?: APIConfig
 ): Hono {
   const app = new Hono();
+
+  // Mount the UI routes
+  app.route("/", createServiceManagerUI(serviceManager));
 
   // Add OpenAPI documentation if enabled
   if (config?.openapi?.enabled) {
