@@ -5,13 +5,14 @@ import type {
   ServiceConfig,
   RestartPolicy,
 } from "./interface";
+import { CronJob } from "cron";
 
 interface ServiceEntry {
   service: IService;
   config: ServiceConfig;
   restartCount: number;
   restartTimer?: NodeJS.Timeout;
-  cronTimer?: NodeJS.Timeout;
+  cronJob?: CronJob;
 }
 
 export class ServiceManager implements IServiceManager {
@@ -50,8 +51,10 @@ export class ServiceManager implements IServiceManager {
     if (entry.restartTimer) {
       clearTimeout(entry.restartTimer);
     }
-    if (entry.cronTimer) {
-      clearTimeout(entry.cronTimer);
+
+    // Stop any active cron job
+    if (entry.cronJob) {
+      entry.cronJob.stop();
     }
 
     this.serviceMap.delete(serviceName);
@@ -81,6 +84,11 @@ export class ServiceManager implements IServiceManager {
     if (entry.restartTimer) {
       clearTimeout(entry.restartTimer);
       entry.restartTimer = undefined;
+    }
+
+    // Stop any active cron job
+    if (entry.cronJob) {
+      entry.cronJob.stop();
     }
 
     await entry.service.stop();
@@ -196,48 +204,44 @@ export class ServiceManager implements IServiceManager {
     if (!entry.config.cronJob) return;
 
     const { schedule } = entry.config.cronJob;
+    const { service } = entry;
 
-    // Simple cron implementation - this is a placeholder
-    // In a real implementation, you would use a proper cron library
-    // like 'node-cron' to parse and schedule jobs
+    // Clean up any existing cron job
+    if (entry.cronJob) {
+      entry.cronJob.stop();
+    }
 
-    // For now, we'll just schedule a job every minute as an example
-    const cronInterval = 60 * 1000; // 1 minute
-
-    entry.cronTimer = setInterval(async () => {
-      // Check if the current time matches the schedule
-      const shouldRunCronJob = this.shouldRunCronJob(schedule);
-
-      if (shouldRunCronJob) {
+    // Create a new cron job using the cron package
+    entry.cronJob = new CronJob(
+      schedule,
+      async () => {
         try {
           // Start the service, which should auto-terminate if configured that way
-          await entry.service.start();
+          await service.start();
 
           // If a timeout is specified, ensure the service stops
           if (entry.config.cronJob?.timeout) {
             setTimeout(async () => {
               try {
-                await entry.service.stop();
+                if (service.getStatus() !== "stopped") {
+                  await service.stop();
+                }
               } catch (error) {
                 console.error(
-                  `Error stopping service '${entry.service.name}' after timeout: ${error}`
+                  `Error stopping service '${service.name}' after timeout: ${error}`
                 );
               }
             }, entry.config.cronJob.timeout);
           }
         } catch (error) {
           console.error(
-            `Error running cron job for service '${entry.service.name}': ${error}`
+            `Error running cron job for service '${service.name}': ${error}`
           );
         }
-      }
-    }, cronInterval);
-  }
-
-  private shouldRunCronJob(schedule: string): boolean {
-    // This is a very simplified implementation
-    // In reality, you would parse the cron expression and check against the current time
-    // For the example, we'll just return true to run the job
-    return true;
+      },
+      null, // onComplete
+      true, // start immediately
+      undefined // timezone (use system timezone)
+    );
   }
 }

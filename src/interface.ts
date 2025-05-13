@@ -18,6 +18,7 @@ export interface IService {
   start(): Promise<void>;
   stop(): Promise<void>;
   healthCheck(): Promise<HealthCheckResult>;
+  getStatus(): ServiceStatus;
 }
 
 export interface CronJobConfig {

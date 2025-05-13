@@ -8,7 +8,7 @@ async function main() {
   const logService = createWorkerService(
     "logging-service",
     new URL("./services/logService.ts", import.meta.url),
-    { autoTerminate: false }
+    { autoTerminate: false },
   );
 
   // Add service to manager with restart policy
