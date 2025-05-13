@@ -182,6 +182,62 @@ j8s handles worker communication internally using [kkrpc](https://github.com/khu
 
 Check the [examples](./examples) directory for more detailed examples.
 
+### Cron Job Example
+
+Here's an example of a service that runs every 5 minutes:
+
+```typescript
+// cronService.ts
+import { ServiceWorker, type IService } from "j8s";
+
+class CronService implements IService {
+  name = "cronService";
+
+  async start(): Promise<void> {
+    console.log("Cron service started");
+    
+    // Your scheduled task logic here
+    console.log("Running scheduled task...");
+    
+    // For cron jobs, the service should exit after completing its task
+    // The service manager will restart it based on the cron schedule
+    process.exit(0);
+  }
+
+  async stop(): Promise<void> {
+    console.log("Cron service stopped");
+  }
+}
+
+// Initialize the worker
+new ServiceWorker(new CronService());
+```
+
+And here's how to register it with a cron schedule:
+
+```typescript
+// main.ts
+import { ServiceManager } from "j8s";
+import path from "path";
+
+async function main() {
+  const manager = new ServiceManager();
+
+  // Register a cron service that runs every 5 minutes
+  manager.register({
+    name: "cronService",
+    script: path.resolve(__dirname, "./cronService.ts"),
+    longRunning: false, // Set to false for cron jobs
+    cron: "*/5 * * * *", // Runs every 5 minutes
+    timeout: 60000, // 1 minute timeout
+  });
+
+  await manager.startAll();
+}
+
+main().catch(console.error);
+```
+
 ## License
 
 MIT
