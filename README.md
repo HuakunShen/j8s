@@ -24,12 +24,21 @@ import { BaseService, ServiceManager } from "j8s";
 class MyService extends BaseService {
   async start(): Promise<void> {
     console.log("Service started");
-    this.setStatus("running");
+    // Service status is managed by ServiceManager
   }
 
   async stop(): Promise<void> {
     console.log("Service stopped");
-    this.setStatus("stopped");
+    // Service status is managed by ServiceManager
+  }
+
+  async healthCheck(): Promise<HealthCheckResult> {
+    return {
+      status: "running", // This will be overridden by ServiceManager
+      details: {
+        // Add custom health check details
+      },
+    };
   }
 }
 
@@ -121,18 +130,24 @@ class BackupService extends BaseService {
   async start(): Promise<void> {
     console.log("Running backup...");
     // Do backup logic here
-    this.setStatus("running");
 
     // Simulate work
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     console.log("Backup completed");
-    this.setStatus("stopped");
   }
 
   async stop(): Promise<void> {
     // Handle stop if needed
-    this.setStatus("stopped");
+  }
+
+  async healthCheck(): Promise<HealthCheckResult> {
+    return {
+      status: "running", // This will be overridden by ServiceManager
+      details: {
+        // Add custom health check details
+      },
+    };
   }
 }
 
@@ -150,7 +165,7 @@ manager.addService(backupService, {
 
 ## REST API
 
-j8s includes a built-in REST API for managing services:
+j8s includes a built-in REST API for managing services using Hono. The API is fully documented with OpenAPI/Swagger specifications and includes request/response validation.
 
 ```typescript
 import { serve } from "@hono/node-server";
@@ -160,8 +175,24 @@ import { ServiceManager, createServiceManagerAPI } from "j8s";
 const manager = new ServiceManager();
 // Add services...
 
-// Create the REST API
-const app = createServiceManagerAPI(manager);
+// Create the REST API with optional OpenAPI/Scalar documentation
+const app = createServiceManagerAPI(manager, {
+  // Optional: Enable OpenAPI documentation
+  openapi: {
+    enabled: true,
+    info: {
+      title: "j8s Service Manager API",
+      version: "1.0.0",
+      description: "API for managing j8s services",
+    },
+    servers: [{ url: "http://localhost:3000", description: "Local Server" }],
+  },
+  // Optional: Enable Scalar API reference UI
+  scalar: {
+    enabled: true,
+    theme: "deepSpace",
+  },
+});
 
 // Start the HTTP server
 serve({
@@ -184,6 +215,92 @@ console.log("API server running on http://localhost:3000");
 - `GET /health` - Get health for all services
 - `POST /services/start-all` - Start all services
 - `POST /services/stop-all` - Stop all services
+
+### Optional Documentation Endpoints
+
+When enabled, the following endpoints are available:
+
+- `GET /openapi` - OpenAPI/Swagger specification
+  - You can generate a OpenAPI client SDK in any language with this
+- `GET /scalar` - Interactive API documentation UI
+
+### API Response Types
+
+All API responses are validated and documented. Here are the main response types:
+
+```typescript
+// Service list response
+interface ServicesListResponse {
+  services: Array<{
+    name: string;
+  }>;
+}
+
+// Service details response
+interface ServiceResponse {
+  name: string;
+  status: string;
+  health: {
+    status: string;
+    details?: Record<string, any>;
+  };
+}
+
+// Health check response
+interface HealthCheckResponse {
+  status: string;
+  details?: Record<string, any>;
+}
+
+// Error response
+interface ErrorResponse {
+  error: string;
+}
+
+// Success message response
+interface MessageResponse {
+  message: string;
+}
+```
+
+### API Configuration
+
+The `createServiceManagerAPI` function accepts an optional configuration object:
+
+```typescript
+interface APIConfig {
+  openapi?: {
+    enabled?: boolean;
+    info?: {
+      title?: string;
+      version?: string;
+      description?: string;
+    };
+    servers?: Array<{
+      url: string;
+      description?: string;
+    }>;
+  };
+  scalar?: {
+    enabled?: boolean;
+    theme?:
+      | "default"
+      | "deepSpace"
+      | "alternate"
+      | "moon"
+      | "purple"
+      | "solarized"
+      | "bluePlanet"
+      | "saturn"
+      | "kepler"
+      | "elysiajs"
+      | "fastify"
+      | "mars"
+      | "laserwave"
+      | "none";
+  };
+}
+```
 
 ## API Reference
 
@@ -223,11 +340,11 @@ interface CronJobConfig {
 
 #### BaseService
 
-A base class for services running in the main thread.
+A base class for services running in the main thread. Service status is managed by the ServiceManager.
 
 #### ServiceManager
 
-Manages all services, handling starting, stopping, health checks, and restart policies.
+Manages all services, handling starting, stopping, health checks, and restart policies. The ServiceManager is responsible for tracking and managing service status.
 
 #### WorkerService
 

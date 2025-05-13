@@ -76,8 +76,76 @@ const AllHealthCheckResponseSchema = v.record(
   "AllHealthCheckResponseSchema"
 );
 
-export function createServiceManagerAPI(serviceManager: IServiceManager): Hono {
+export interface APIConfig {
+  openapi?: {
+    enabled?: boolean;
+    info?: {
+      title?: string;
+      version?: string;
+      description?: string;
+    };
+    servers?: Array<{
+      url: string;
+      description?: string;
+    }>;
+  };
+  scalar?: {
+    enabled?: boolean;
+    theme?:
+      | "default"
+      | "deepSpace"
+      | "alternate"
+      | "moon"
+      | "purple"
+      | "solarized"
+      | "bluePlanet"
+      | "saturn"
+      | "kepler"
+      | "elysiajs"
+      | "fastify"
+      | "mars"
+      | "laserwave"
+      | "none";
+  };
+}
+
+export function createServiceManagerAPI(
+  serviceManager: IServiceManager,
+  config?: APIConfig
+): Hono {
   const app = new Hono();
+
+  // Add OpenAPI documentation if enabled
+  if (config?.openapi?.enabled) {
+    app.get(
+      "/openapi",
+      openAPISpecs(app, {
+        documentation: {
+          info: {
+            title: config.openapi.info?.title ?? "j8s Service Manager API",
+            version: config.openapi.info?.version ?? "1.0.0",
+            description:
+              config.openapi.info?.description ??
+              "API for managing j8s services",
+          },
+          servers: config.openapi.servers ?? [
+            { url: "http://localhost:3000", description: "Local Server" },
+          ],
+        },
+      })
+    );
+  }
+
+  // Add Scalar API reference UI if enabled
+  if (config?.scalar?.enabled) {
+    app.get(
+      "/scalar",
+      Scalar({
+        url: "/openapi",
+        theme: config.scalar.theme ?? "deepSpace",
+      })
+    );
+  }
 
   // List all services
   app.get(
@@ -415,23 +483,6 @@ export function createServiceManagerAPI(serviceManager: IServiceManager): Hono {
       }
     }
   );
-
-  app.get(
-    "/openapi",
-    openAPISpecs(app, {
-      documentation: {
-        info: {
-          title: "Hono API",
-          version: "1.0.0",
-          description: "Greeting API",
-        },
-        servers: [
-          { url: "http://localhost:3000", description: "Local Server" },
-        ],
-      },
-    })
-  );
-  app.get("/scalar", Scalar({ url: "/openapi", theme: "deepSpace" }));
 
   return app;
 }
