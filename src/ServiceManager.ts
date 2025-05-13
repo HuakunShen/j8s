@@ -100,7 +100,7 @@ export class ServiceManager implements IServiceManager {
   }
 
   public async healthCheckService(
-    serviceName: string
+    serviceName: string,
   ): Promise<HealthCheckResult> {
     const entry = this.serviceMap.get(serviceName);
     if (!entry) {
@@ -112,7 +112,7 @@ export class ServiceManager implements IServiceManager {
 
   public async startAllServices(): Promise<void> {
     const startPromises = Array.from(this.serviceMap.values()).map((entry) =>
-      this.startService(entry.service.name)
+      this.startService(entry.service.name),
     );
 
     await Promise.all(startPromises);
@@ -121,7 +121,7 @@ export class ServiceManager implements IServiceManager {
   public async stopAllServices(): Promise<void> {
     const services = Array.from(this.serviceMap.values());
     const stopResults = await Promise.allSettled(
-      services.map((entry) => this.stopService(entry.service.name))
+      services.map((entry) => this.stopService(entry.service.name)),
     );
 
     stopResults.forEach((result, idx) => {
@@ -129,7 +129,7 @@ export class ServiceManager implements IServiceManager {
         const serviceName = services[idx]?.service.name;
         console.error(
           `Failed to stop service '${serviceName}':`,
-          result.reason
+          result.reason,
         );
       }
     });
@@ -149,7 +149,7 @@ export class ServiceManager implements IServiceManager {
 
   private async handleServiceFailure(
     entry: ServiceEntry,
-    error: unknown
+    error: unknown,
   ): Promise<void> {
     const { service, config } = entry;
     const policy = config.restartPolicy || "on-failure";
@@ -165,7 +165,7 @@ export class ServiceManager implements IServiceManager {
     // For 'on-failure', check if we've exceeded maxRetries
     if (policy === "on-failure" && entry.restartCount >= maxRetries) {
       console.error(
-        `Service '${service.name}' exceeded max restart attempts (${maxRetries})`
+        `Service '${service.name}' exceeded max restart attempts (${maxRetries})`,
       );
       return;
     }
@@ -175,11 +175,11 @@ export class ServiceManager implements IServiceManager {
     const maxDelay = 30000; // 30 seconds
     const delay = Math.min(
       baseDelay * Math.pow(2, entry.restartCount),
-      maxDelay
+      maxDelay,
     );
 
     console.log(
-      `Restarting service '${service.name}' in ${delay}ms (attempt ${entry.restartCount + 1})`
+      `Restarting service '${service.name}' in ${delay}ms (attempt ${entry.restartCount + 1})`,
     );
 
     // Clear any existing restart timer
@@ -228,20 +228,20 @@ export class ServiceManager implements IServiceManager {
                 }
               } catch (error) {
                 console.error(
-                  `Error stopping service '${service.name}' after timeout: ${error}`
+                  `Error stopping service '${service.name}' after timeout: ${error}`,
                 );
               }
             }, entry.config.cronJob.timeout);
           }
         } catch (error) {
           console.error(
-            `Error running cron job for service '${service.name}': ${error}`
+            `Error running cron job for service '${service.name}': ${error}`,
           );
         }
       },
       null, // onComplete
       true, // start immediately
-      undefined // timezone (use system timezone)
+      undefined, // timezone (use system timezone)
     );
   }
 }

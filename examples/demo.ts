@@ -67,7 +67,7 @@ class CronService extends BaseService {
 
   async start(): Promise<void> {
     console.log(
-      `Running cron job ${this.name} - ${this.taskName} at ${new Date().toISOString()}`
+      `Running cron job ${this.name} - ${this.taskName} at ${new Date().toISOString()}`,
     );
     this.setStatus("running");
 
@@ -75,7 +75,7 @@ class CronService extends BaseService {
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     console.log(
-      `Cron job ${this.name} - ${this.taskName} completed at ${new Date().toISOString()}`
+      `Cron job ${this.name} - ${this.taskName} completed at ${new Date().toISOString()}`,
     );
     this.setStatus("stopped");
   }
@@ -100,7 +100,7 @@ async function runDemo() {
   const workerService = createWorkerService(
     "logging-service",
     new URL("./services/logService.ts", import.meta.url),
-    { autoTerminate: false }
+    { autoTerminate: false },
   );
   manager.addService(workerService, {
     restartPolicy: "on-failure",
@@ -128,7 +128,7 @@ async function runDemo() {
   // Add a cron job service that runs at specific times
   const notificationService = new CronService(
     "notification-service",
-    "Send notifications"
+    "Send notifications",
   );
   manager.addService(notificationService, {
     cronJob: {
