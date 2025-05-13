@@ -4,7 +4,7 @@
     "": {
       "name": "j8s",
       "dependencies": {
-        "@kunkun/kkrpc": "npm:@jsr/kunkun__kkrpc",
+        "@kunkun/kkrpc": "npm:@jsr/kunkun__kkrpc@0.2.2",
         "cron": "^4.3.0",
       },
       "devDependencies": {
