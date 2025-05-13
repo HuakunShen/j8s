@@ -1,6 +1,6 @@
 {
   "name": "j8s",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "type": "module",
   "private": true,
   "scripts": {
@@ -11,6 +11,7 @@
     "./api": "./src/api.ts"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.4",
     "@hono/node-server": "^1.14.1",
     "@types/bun": "latest",
     "prettier": "^3.5.3",
