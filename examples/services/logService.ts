@@ -3,13 +3,9 @@ import {
   WorkerChildIO,
   type DestroyableIoInterface,
 } from "@kunkun/kkrpc";
-import type { HealthCheckResult, IService } from "../src/interface";
+import type { HealthCheckResult, IService } from "../../src/interface";
 
 const io: DestroyableIoInterface = new WorkerChildIO();
-
-// setTimeout(() => {
-//   io.destroy();
-// }, 1000);
 
 class LoggingService implements IService {
   name = "loggingService";

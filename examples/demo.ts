@@ -84,30 +84,30 @@ async function runDemo() {
   const manager = new ServiceManager();
 
   // Add a simple service that runs in the main thread
-  const mainService = new SimpleService("main-service");
-  manager.addService(mainService, {
-    restartPolicy: "always",
-  });
+  // const mainService = new SimpleService("main-service");
+  // manager.addService(mainService, {
+  //   restartPolicy: "always",
+  // });
 
   // Add a worker service from an existing worker file
   const workerService = createWorkerService(
     "logging-service",
-    new URL("./logService.ts", import.meta.url),
-    { autoTerminate: false },
+    new URL("./services/logService.ts", import.meta.url),
+    { autoTerminate: false }
   );
   manager.addService(workerService, {
     restartPolicy: "on-failure",
     maxRetries: 3,
   });
 
-  // Add a cron job service
-  const cronService = new CronService("backup-service");
-  manager.addService(cronService, {
-    cronJob: {
-      schedule: "* * * * *", // Run every minute
-      timeout: 5000, // Timeout after 5 seconds
-    },
-  });
+  // // Add a cron job service
+  // const cronService = new CronService("backup-service");
+  // manager.addService(cronService, {
+  //   cronJob: {
+  //     schedule: "* * * * *", // Run every minute
+  //     timeout: 5000, // Timeout after 5 seconds
+  //   },
+  // });
 
   // Start all services
   console.log("Starting all services...");
@@ -117,7 +117,11 @@ async function runDemo() {
   setInterval(async () => {
     const healthStatus = await manager.healthCheckAllServices();
     console.log("Health Status:", JSON.stringify(healthStatus, null, 2));
-  }, 10000);
+  }, 10_000);
+
+  // setTimeout(async () => {
+  //   await manager.stopService("logging-service");
+  // }, 200);
 
   // Set up graceful shutdown
   const shutdown = async () => {

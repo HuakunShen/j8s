@@ -1,4 +1,4 @@
-import { ServiceManager, createWorkerService } from "./index";
+import { ServiceManager, createWorkerService } from "../index";
 
 async function main() {
   // Create a service manager
@@ -7,8 +7,8 @@ async function main() {
   // Add a worker service
   const logService = createWorkerService(
     "logging-service",
-    new URL("./examples/logService.ts", import.meta.url),
-    { autoTerminate: false },
+    new URL("./services/logService.ts", import.meta.url),
+    { autoTerminate: false }
   );
 
   // Add service to manager with restart policy
@@ -18,17 +18,17 @@ async function main() {
   });
 
   // Start the service
-  await manager.startService(logService);
+  await manager.startService(logService.name);
 
   // Wait for 5 seconds
   await new Promise((resolve) => setTimeout(resolve, 5000));
 
   // Check the health
-  const health = await manager.healthCheckService(logService);
+  const health = await manager.healthCheckService(logService.name);
   console.log("Health check result:", health);
 
   // Stop the service
-  await manager.stopService(logService);
+  await manager.stopService(logService.name);
 
   console.log("Done");
 }

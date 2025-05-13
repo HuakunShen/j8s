@@ -22,7 +22,7 @@ export function createWorkerService(
   name: string,
   workerPath: string | URL,
   options?: Partial<WorkerServiceOptions>
-) {
+): WorkerService {
   const fullOptions: WorkerServiceOptions = {
     workerURL: workerPath,
     workerOptions: { type: "module" },

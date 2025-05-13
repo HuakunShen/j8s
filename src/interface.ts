@@ -34,11 +34,11 @@ export interface ServiceConfig {
 export interface IServiceManager {
   services: IService[];
   addService(service: IService, config?: ServiceConfig): void;
-  removeService(service: IService): void;
-  startService(service: IService): Promise<void>;
-  stopService(service: IService): Promise<void>;
-  restartService(service: IService): Promise<void>;
-  healthCheckService(service: IService): Promise<HealthCheckResult>;
+  removeService(serviceName: string): void;
+  startService(serviceName: string): Promise<void>;
+  stopService(serviceName: string): Promise<void>;
+  restartService(serviceName: string): Promise<void>;
+  healthCheckService(serviceName: string): Promise<HealthCheckResult>;
   startAllServices(): Promise<void>;
   stopAllServices(): Promise<void>;
   healthCheckAllServices(): Promise<Record<string, HealthCheckResult>>;

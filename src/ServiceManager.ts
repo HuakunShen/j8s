@@ -40,8 +40,8 @@ export class ServiceManager implements IServiceManager {
     }
   }
 
-  public removeService(service: IService): void {
-    const entry = this.serviceMap.get(service.name);
+  public removeService(serviceName: string): void {
+    const entry = this.serviceMap.get(serviceName);
     if (!entry) {
       return;
     }
@@ -54,27 +54,27 @@ export class ServiceManager implements IServiceManager {
       clearTimeout(entry.cronTimer);
     }
 
-    this.serviceMap.delete(service.name);
+    this.serviceMap.delete(serviceName);
   }
 
-  public async startService(service: IService): Promise<void> {
-    const entry = this.serviceMap.get(service.name);
+  public async startService(serviceName: string): Promise<void> {
+    const entry = this.serviceMap.get(serviceName);
     if (!entry) {
-      throw new Error(`Service '${service.name}' not found`);
+      throw new Error(`Service '${serviceName}' not found`);
     }
 
     try {
-      await service.start();
+      await entry.service.start();
       entry.restartCount = 0;
     } catch (error) {
       await this.handleServiceFailure(entry, error);
     }
   }
 
-  public async stopService(service: IService): Promise<void> {
-    const entry = this.serviceMap.get(service.name);
+  public async stopService(serviceName: string): Promise<void> {
+    const entry = this.serviceMap.get(serviceName);
     if (!entry) {
-      throw new Error(`Service '${service.name}' not found`);
+      throw new Error(`Service '${serviceName}' not found`);
     }
 
     // Clear any pending restart
@@ -83,39 +83,48 @@ export class ServiceManager implements IServiceManager {
       entry.restartTimer = undefined;
     }
 
-    await service.stop();
+    await entry.service.stop();
   }
 
-  public async restartService(service: IService): Promise<void> {
-    await this.stopService(service);
-    await this.startService(service);
+  public async restartService(serviceName: string): Promise<void> {
+    await this.stopService(serviceName);
+    await this.startService(serviceName);
   }
 
   public async healthCheckService(
-    service: IService,
+    serviceName: string
   ): Promise<HealthCheckResult> {
-    const entry = this.serviceMap.get(service.name);
+    const entry = this.serviceMap.get(serviceName);
     if (!entry) {
-      throw new Error(`Service '${service.name}' not found`);
+      throw new Error(`Service '${serviceName}' not found`);
     }
 
-    return await service.healthCheck();
+    return await entry.service.healthCheck();
   }
 
   public async startAllServices(): Promise<void> {
     const startPromises = Array.from(this.serviceMap.values()).map((entry) =>
-      this.startService(entry.service),
+      this.startService(entry.service.name)
     );
 
     await Promise.all(startPromises);
   }
 
   public async stopAllServices(): Promise<void> {
-    const stopPromises = Array.from(this.serviceMap.values()).map((entry) =>
-      this.stopService(entry.service),
+    const services = Array.from(this.serviceMap.values());
+    const stopResults = await Promise.allSettled(
+      services.map((entry) => this.stopService(entry.service.name))
     );
 
-    await Promise.all(stopPromises);
+    stopResults.forEach((result, idx) => {
+      if (result.status === "rejected") {
+        const serviceName = services[idx]?.service.name;
+        console.error(
+          `Failed to stop service '${serviceName}':`,
+          result.reason
+        );
+      }
+    });
   }
 
   public async healthCheckAllServices(): Promise<
@@ -132,7 +141,7 @@ export class ServiceManager implements IServiceManager {
 
   private async handleServiceFailure(
     entry: ServiceEntry,
-    error: unknown,
+    error: unknown
   ): Promise<void> {
     const { service, config } = entry;
     const policy = config.restartPolicy || "on-failure";
@@ -148,7 +157,7 @@ export class ServiceManager implements IServiceManager {
     // For 'on-failure', check if we've exceeded maxRetries
     if (policy === "on-failure" && entry.restartCount >= maxRetries) {
       console.error(
-        `Service '${service.name}' exceeded max restart attempts (${maxRetries})`,
+        `Service '${service.name}' exceeded max restart attempts (${maxRetries})`
       );
       return;
     }
@@ -158,11 +167,11 @@ export class ServiceManager implements IServiceManager {
     const maxDelay = 30000; // 30 seconds
     const delay = Math.min(
       baseDelay * Math.pow(2, entry.restartCount),
-      maxDelay,
+      maxDelay
     );
 
     console.log(
-      `Restarting service '${service.name}' in ${delay}ms (attempt ${entry.restartCount + 1})`,
+      `Restarting service '${service.name}' in ${delay}ms (attempt ${entry.restartCount + 1})`
     );
 
     // Clear any existing restart timer
@@ -211,14 +220,14 @@ export class ServiceManager implements IServiceManager {
                 await entry.service.stop();
               } catch (error) {
                 console.error(
-                  `Error stopping service '${entry.service.name}' after timeout: ${error}`,
+                  `Error stopping service '${entry.service.name}' after timeout: ${error}`
                 );
               }
             }, entry.config.cronJob.timeout);
           }
         } catch (error) {
           console.error(
-            `Error running cron job for service '${entry.service.name}': ${error}`,
+            `Error running cron job for service '${entry.service.name}': ${error}`
           );
         }
       }
