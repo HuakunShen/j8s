@@ -1,18 +1,36 @@
-import {
-  RPCChannel,
-  WorkerParentIO,
-  type DestroyableIoInterface,
-} from "@kunkun/kkrpc";
-import type { IService } from "./src/interface";
+import { ServiceManager, createWorkerService } from "./index";
 
-const worker = new Worker(
-  new URL("./examples/mathService.ts", import.meta.url).href,
-  { type: "module" }
-);
-const io = new WorkerParentIO(worker);
-const rpc = new RPCChannel<object, IService, DestroyableIoInterface>(io, {});
-const api = rpc.getAPI();
-await api.start();
+async function main() {
+  // Create a service manager
+  const manager = new ServiceManager();
 
-await api.stop();
-await io.destroy();
+  // Add a worker service
+  const logService = createWorkerService(
+    "logging-service",
+    new URL("./examples/logService.ts", import.meta.url),
+    { autoTerminate: false },
+  );
+
+  // Add service to manager with restart policy
+  manager.addService(logService, {
+    restartPolicy: "on-failure",
+    maxRetries: 3,
+  });
+
+  // Start the service
+  await manager.startService(logService);
+
+  // Wait for 5 seconds
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+
+  // Check the health
+  const health = await manager.healthCheckService(logService);
+  console.log("Health check result:", health);
+
+  // Stop the service
+  await manager.stopService(logService);
+
+  console.log("Done");
+}
+
+main().catch(console.error);

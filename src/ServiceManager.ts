@@ -1,0 +1,234 @@
+import type {
+  HealthCheckResult,
+  IService,
+  IServiceManager,
+  ServiceConfig,
+  RestartPolicy,
+} from "./interface";
+
+interface ServiceEntry {
+  service: IService;
+  config: ServiceConfig;
+  restartCount: number;
+  restartTimer?: NodeJS.Timeout;
+  cronTimer?: NodeJS.Timeout;
+}
+
+export class ServiceManager implements IServiceManager {
+  private serviceMap: Map<string, ServiceEntry> = new Map();
+
+  get services(): IService[] {
+    return Array.from(this.serviceMap.values()).map((entry) => entry.service);
+  }
+
+  public addService(service: IService, config: ServiceConfig = {}): void {
+    if (this.serviceMap.has(service.name)) {
+      throw new Error(`Service with name '${service.name}' already exists`);
+    }
+
+    const serviceEntry: ServiceEntry = {
+      service,
+      config,
+      restartCount: 0,
+    };
+
+    this.serviceMap.set(service.name, serviceEntry);
+
+    // Set up cron job if configured
+    if (config.cronJob) {
+      this.setupCronJob(serviceEntry);
+    }
+  }
+
+  public removeService(service: IService): void {
+    const entry = this.serviceMap.get(service.name);
+    if (!entry) {
+      return;
+    }
+
+    // Clean up any timers
+    if (entry.restartTimer) {
+      clearTimeout(entry.restartTimer);
+    }
+    if (entry.cronTimer) {
+      clearTimeout(entry.cronTimer);
+    }
+
+    this.serviceMap.delete(service.name);
+  }
+
+  public async startService(service: IService): Promise<void> {
+    const entry = this.serviceMap.get(service.name);
+    if (!entry) {
+      throw new Error(`Service '${service.name}' not found`);
+    }
+
+    try {
+      await service.start();
+      entry.restartCount = 0;
+    } catch (error) {
+      await this.handleServiceFailure(entry, error);
+    }
+  }
+
+  public async stopService(service: IService): Promise<void> {
+    const entry = this.serviceMap.get(service.name);
+    if (!entry) {
+      throw new Error(`Service '${service.name}' not found`);
+    }
+
+    // Clear any pending restart
+    if (entry.restartTimer) {
+      clearTimeout(entry.restartTimer);
+      entry.restartTimer = undefined;
+    }
+
+    await service.stop();
+  }
+
+  public async restartService(service: IService): Promise<void> {
+    await this.stopService(service);
+    await this.startService(service);
+  }
+
+  public async healthCheckService(
+    service: IService,
+  ): Promise<HealthCheckResult> {
+    const entry = this.serviceMap.get(service.name);
+    if (!entry) {
+      throw new Error(`Service '${service.name}' not found`);
+    }
+
+    return await service.healthCheck();
+  }
+
+  public async startAllServices(): Promise<void> {
+    const startPromises = Array.from(this.serviceMap.values()).map((entry) =>
+      this.startService(entry.service),
+    );
+
+    await Promise.all(startPromises);
+  }
+
+  public async stopAllServices(): Promise<void> {
+    const stopPromises = Array.from(this.serviceMap.values()).map((entry) =>
+      this.stopService(entry.service),
+    );
+
+    await Promise.all(stopPromises);
+  }
+
+  public async healthCheckAllServices(): Promise<
+    Record<string, HealthCheckResult>
+  > {
+    const results: Record<string, HealthCheckResult> = {};
+
+    for (const [name, entry] of this.serviceMap.entries()) {
+      results[name] = await entry.service.healthCheck();
+    }
+
+    return results;
+  }
+
+  private async handleServiceFailure(
+    entry: ServiceEntry,
+    error: unknown,
+  ): Promise<void> {
+    const { service, config } = entry;
+    const policy = config.restartPolicy || "on-failure";
+    const maxRetries = config.maxRetries || 3;
+
+    console.error(`Service '${service.name}' failed: ${error}`);
+
+    // Don't restart if policy is 'no'
+    if (policy === "no") {
+      return;
+    }
+
+    // For 'on-failure', check if we've exceeded maxRetries
+    if (policy === "on-failure" && entry.restartCount >= maxRetries) {
+      console.error(
+        `Service '${service.name}' exceeded max restart attempts (${maxRetries})`,
+      );
+      return;
+    }
+
+    // Schedule restart with exponential backoff
+    const baseDelay = 1000; // 1 second
+    const maxDelay = 30000; // 30 seconds
+    const delay = Math.min(
+      baseDelay * Math.pow(2, entry.restartCount),
+      maxDelay,
+    );
+
+    console.log(
+      `Restarting service '${service.name}' in ${delay}ms (attempt ${entry.restartCount + 1})`,
+    );
+
+    // Clear any existing restart timer
+    if (entry.restartTimer) {
+      clearTimeout(entry.restartTimer);
+    }
+
+    // Set up restart timer
+    entry.restartTimer = setTimeout(async () => {
+      entry.restartCount++;
+      entry.restartTimer = undefined;
+
+      try {
+        await service.start();
+      } catch (err) {
+        await this.handleServiceFailure(entry, err);
+      }
+    }, delay);
+  }
+
+  private setupCronJob(entry: ServiceEntry): void {
+    if (!entry.config.cronJob) return;
+
+    const { schedule } = entry.config.cronJob;
+
+    // Simple cron implementation - this is a placeholder
+    // In a real implementation, you would use a proper cron library
+    // like 'node-cron' to parse and schedule jobs
+
+    // For now, we'll just schedule a job every minute as an example
+    const cronInterval = 60 * 1000; // 1 minute
+
+    entry.cronTimer = setInterval(async () => {
+      // Check if the current time matches the schedule
+      const shouldRunCronJob = this.shouldRunCronJob(schedule);
+
+      if (shouldRunCronJob) {
+        try {
+          // Start the service, which should auto-terminate if configured that way
+          await entry.service.start();
+
+          // If a timeout is specified, ensure the service stops
+          if (entry.config.cronJob?.timeout) {
+            setTimeout(async () => {
+              try {
+                await entry.service.stop();
+              } catch (error) {
+                console.error(
+                  `Error stopping service '${entry.service.name}' after timeout: ${error}`,
+                );
+              }
+            }, entry.config.cronJob.timeout);
+          }
+        } catch (error) {
+          console.error(
+            `Error running cron job for service '${entry.service.name}': ${error}`,
+          );
+        }
+      }
+    }, cronInterval);
+  }
+
+  private shouldRunCronJob(schedule: string): boolean {
+    // This is a very simplified implementation
+    // In reality, you would parse the cron expression and check against the current time
+    // For the example, we'll just return true to run the job
+    return true;
+  }
+}
