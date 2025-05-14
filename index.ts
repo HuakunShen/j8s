@@ -1,3 +1,85 @@
+/**
+ * j8s - JavaScript Service Orchestrator
+ *
+ * A lightweight service orchestration framework for JavaScript/TypeScript.
+ * Run multiple services in a single process using worker threads.
+ *
+ * @example
+ * ```ts
+ * // Running a service in the main thread
+ * import { BaseService, ServiceManager } from "j8s";
+ *
+ * class MyService extends BaseService {
+ *   async start(): Promise<void> {
+ *     console.log("Service started");
+ *   }
+ *
+ *   async stop(): Promise<void> {
+ *     console.log("Service stopped");
+ *   }
+ *
+ *   async healthCheck(): Promise<HealthCheckResult> {
+ *     return { status: "running" };
+ *   }
+ * }
+ *
+ * const manager = new ServiceManager();
+ * const myService = new MyService("my-service");
+ * manager.addService(myService, { restartPolicy: "always" });
+ * await manager.startService(myService);
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Running a service in a worker thread
+ * import { ServiceManager, createWorkerService } from "j8s";
+ *
+ * const workerService = createWorkerService(
+ *   "worker-service",
+ *   new URL("./worker.ts", import.meta.url),
+ *   { autoTerminate: false }
+ * );
+ *
+ * const manager = new ServiceManager();
+ * manager.addService(workerService, {
+ *   restartPolicy: "on-failure",
+ *   maxRetries: 3,
+ * });
+ * await manager.startService(workerService);
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Running a service as a cron job
+ * import { BaseService, ServiceManager } from "j8s";
+ *
+ * class BackupService extends BaseService {
+ *   async start(): Promise<void> {
+ *     console.log("Running backup...");
+ *     // Do backup logic here
+ *   }
+ *
+ *   async stop(): Promise<void> {}
+ *
+ *   async healthCheck(): Promise<HealthCheckResult> {
+ *     return { status: "running" };
+ *   }
+ * }
+ *
+ * const manager = new ServiceManager();
+ * const backupService = new BackupService("backup-service");
+ *
+ * manager.addService(backupService, {
+ *   cronJob: {
+ *     schedule: "0 0 * * *", // Run at midnight every day
+ *     timeout: 60000, // 1 minute timeout
+ *   },
+ * });
+ * ```
+ *
+ * @module
+ */
+
 // Export interfaces and types
 export type {
   ServiceStatus,
@@ -9,15 +91,36 @@ export type {
   IServiceManager,
 } from "./src/interface";
 
-// Export base classes
+/**
+ * Base class for all services.
+ */
 export { BaseService } from "./src/BaseService";
+
+/**
+ * Service manager for managing all services.
+ */
 export { ServiceManager } from "./src/ServiceManager";
+
+/**
+ * Worker service for running services in a worker thread.
+ */
 export { WorkerService } from "./src/WorkerService";
+
+/**
+ * Options for the worker service.
+ */
 export type { WorkerServiceOptions } from "./src/WorkerService";
 
 // Create a helper to create a worker-based service
 import { WorkerService, type WorkerServiceOptions } from "./src/WorkerService";
 
+/**
+ * Creates a new worker-based service.
+ * @param name - The name of the service.
+ * @param workerPath - The path to the worker file.
+ * @param options - The options for the worker service.
+ * @returns A new worker-based service that can be added to the service manager.
+ */
 export function createWorkerService(
   name: string,
   workerPath: string | URL,

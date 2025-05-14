@@ -110,6 +110,12 @@ export interface APIConfig {
   };
 }
 
+/**
+ * Creates a new service manager REST API.
+ * @param serviceManager - The service manager to use.
+ * @param config - The configuration for the API.
+ * @returns A new service manager REST API.
+ */
 export function createServiceManagerAPI(
   serviceManager: IServiceManager,
   config?: APIConfig
