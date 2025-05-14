@@ -77,6 +77,41 @@
  * });
  * ```
  *
+ * @example
+ * ```ts
+ * // Creating a worker service with the expose function
+ * // worker.ts
+ * import { expose } from "j8s";
+ * import type { HealthCheckResult, IService } from "j8s";
+ * 
+ * class WorkerService implements IService {
+ *   name = "worker-service";
+ *   private running = false;
+ * 
+ *   async start(): Promise<void> {
+ *     console.log("Worker service started");
+ *     this.running = true;
+ *   }
+ * 
+ *   async stop(): Promise<void> {
+ *     console.log("Worker service stopped");
+ *     this.running = false;
+ *   }
+ * 
+ *   async healthCheck(): Promise<HealthCheckResult> {
+ *     return {
+ *       status: this.running ? "running" : "stopped",
+ *       details: {
+ *         // Custom health check details
+ *       },
+ *     };
+ *   }
+ * }
+ * 
+ * // Expose the service - no need for manual RPC setup
+ * expose(new WorkerService());
+ * ```
+ *
  * @module
  */
 
@@ -110,6 +145,13 @@ export { WorkerService } from "./src/WorkerService";
  * Options for the worker service.
  */
 export type { WorkerServiceOptions } from "./src/WorkerService";
+
+/**
+ * Exposes a service implementation in a worker thread.
+ * This function handles all the boilerplate code needed to expose a service
+ * implementation through RPC to the main thread.
+ */
+export { expose } from "./src/expose";
 
 // Create a helper to create a worker-based service
 import { WorkerService, type WorkerServiceOptions } from "./src/WorkerService";

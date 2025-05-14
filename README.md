@@ -82,6 +82,8 @@ await manager.startService(workerService);
 
 To create a worker service, you need to implement the `IService` interface in the worker file:
 
+#### Original approach (using kkrpc directly)
+
 ```typescript
 // worker.ts
 import { WorkerChildIO, RPCChannel } from "@kunkun/kkrpc";
@@ -119,6 +121,43 @@ class WorkerService implements IService {
 const rpc = new RPCChannel(io, {
   expose: new WorkerService(),
 });
+```
+
+#### Simplified approach (using the expose function)
+
+```typescript
+// worker.ts
+import { expose } from "j8s";
+import type { IService, HealthCheckResult } from "j8s";
+
+class WorkerService implements IService {
+  name = "worker-service";
+  private running = false;
+
+  async start(): Promise<void> {
+    console.log("Worker service started");
+    this.running = true;
+    // Do your initialization here
+  }
+
+  async stop(): Promise<void> {
+    console.log("Worker service stopped");
+    this.running = false;
+    // Do your cleanup here
+  }
+
+  async healthCheck(): Promise<HealthCheckResult> {
+    return {
+      status: this.running ? "running" : "stopped",
+      details: {
+        // Add custom health check details
+      },
+    };
+  }
+}
+
+// Expose the service - no need for manual RPC setup
+expose(new WorkerService());
 ```
 
 ### Running a service as a cron job

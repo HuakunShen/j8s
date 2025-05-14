@@ -1,11 +1,5 @@
-import {
-  RPCChannel,
-  WorkerChildIO,
-  type DestroyableIoInterface,
-} from "@kunkun/kkrpc";
+import { expose } from "../../index";
 import type { HealthCheckResult, IService } from "../../src/interface";
-
-const io: DestroyableIoInterface = new WorkerChildIO();
 
 class LoggingService implements IService {
   name = "loggingService";
@@ -45,7 +39,5 @@ class LoggingService implements IService {
   }
 }
 
-const rpc = new RPCChannel<IService, object, DestroyableIoInterface>(io, {
-  expose: new LoggingService(),
-});
-const api = rpc.getAPI();
+// Expose the service using the simplified expose function
+expose(new LoggingService());
