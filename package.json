@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "check-types": "tsc --noEmit"
   },
   "exports": {
     ".": "./index.ts",

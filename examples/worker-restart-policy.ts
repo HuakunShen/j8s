@@ -1,29 +1,64 @@
-import { ServiceManager, createWorkerService } from "j8s";
+import { ServiceManager, createWorkerService } from "../index";
 
-// Create a worker service that will randomly fail
-const workerService = createWorkerService(
-  "worker-failure-service",
-  new URL("./services/worker-failure.ts", import.meta.url),
-  { autoTerminate: false }
-);
-
-// Create a service manager
-const manager = new ServiceManager();
-
-// Add the worker service with restart policy
-manager.addService(workerService, {
-  restartPolicy: "on-failure",
-  maxRetries: 3,
+// Set up a more robust error handling for Node.js
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection:", reason);
+  // Don't exit the process so we can see the restart behavior
 });
 
-// Start the service
-await manager.startService(workerService.name);
+async function main() {
+  // Create a worker service that will randomly fail
+  const workerService = createWorkerService(
+    "worker-failure-service",
+    new URL("./services/worker-failure.ts", import.meta.url),
+    { autoTerminate: false }
+  );
 
-// Keep the process running to observe background failures and restarts
-console.log("Worker service manager is running. Press Ctrl+C to exit.");
+  // Create a service manager
+  const manager = new ServiceManager();
 
-// Optional: Watch service status changes
-setInterval(async () => {
-  const health = await manager.healthCheckService(workerService.name);
-  console.log(`Service status: ${health.status}`);
-}, 5000);
+  // Add the worker service with restart policy
+  manager.addService(workerService, {
+    restartPolicy: "on-failure",
+    maxRetries: 3, // Set max retries to 3
+  });
+
+  try {
+    // Start the service
+    console.log("Starting worker service with max retries of 3...");
+    await manager.startService(workerService.name);
+
+    // Watch service status
+    const statusInterval = setInterval(async () => {
+      try {
+        const health = await manager.healthCheckService(workerService.name);
+        console.log(
+          `[${new Date().toISOString()}] Service status: ${health.status}, restart count: ${(manager as any).serviceMap.get(workerService.name)?.restartCount || 0}`
+        );
+
+        // If we've exceeded max retries, stop the process
+        if (
+          health.status === "crashed" &&
+          (manager as any).serviceMap.get(workerService.name)?.restartCount >= 3
+        ) {
+          console.log(
+            "Service has reached max retries (3). Will not restart further."
+          );
+          clearInterval(statusInterval);
+        }
+      } catch (err) {
+        console.error("Error checking service health:", err);
+      }
+    }, 2000);
+
+    // Keep the process running
+    console.log("Worker service manager is running. Press Ctrl+C to exit.");
+  } catch (error) {
+    console.error("Error starting worker service:", error);
+  }
+}
+
+main().catch((err) => {
+  console.error("Fatal error:", err);
+  process.exit(1);
+});

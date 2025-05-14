@@ -41,7 +41,7 @@ class MyService extends BaseService {
       const random = Math.random();
       console.log(`Random number: ${random}`);
       // Randomly fail (for demonstration purposes)
-      if (random < 0.1) {
+      if (random < 0.4) {
         // 10% chance of failure
         throw new Error(`Random failure at iteration ${count}`);
       }

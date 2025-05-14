@@ -58,11 +58,11 @@ class TestServiceManager extends ServiceManager {
     if (!entry) return;
 
     entry.restartCount++;
-    entry.status = "starting"; // Set status to starting
+    entry.status = "running"; // Set status directly to running
 
     try {
       await entry.service.start();
-      entry.status = "running"; // Success - set to running
+      // Status is already "running", no need to change
     } catch (error) {
       entry.status = "crashed"; // Failure - set to crashed
     }

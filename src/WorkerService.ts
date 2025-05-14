@@ -29,32 +29,41 @@ export class WorkerService extends BaseService {
   }
 
   private initWorker(): void {
-    if (this.worker) return;
+    // Clean up any existing worker to ensure a fresh start
+    this.cleanup();
 
-    this.worker = new Worker(
-      this.options.workerURL,
-      this.options.workerOptions
-    );
-    this.io = new WorkerParentIO(this.worker);
-    this.rpc = new RPCChannel<object, IService, DestroyableIoInterface>(
-      this.io,
-      {}
-    );
-    this.api = this.rpc.getAPI();
+    try {
+      this.worker = new Worker(
+        this.options.workerURL,
+        this.options.workerOptions
+      );
+      this.io = new WorkerParentIO(this.worker);
+      this.rpc = new RPCChannel<object, IService, DestroyableIoInterface>(
+        this.io,
+        {}
+      );
+      this.api = this.rpc.getAPI();
 
-    // Monitor worker termination
-    this.worker.addEventListener("error", () => {
+      // Monitor worker termination
+      this.worker.addEventListener("error", (event) => {
+        console.error(`Worker error event for ${this.name}:`, event);
+        this.workerStatus = "crashed";
+        this.cleanup();
+      });
+
+      this.worker.addEventListener("messageerror", (event) => {
+        console.error(`Worker message error for ${this.name}:`, event);
+        this.workerStatus = "unhealthy";
+      });
+
+      // Handle clean worker exit
+      if (this.options.autoTerminate) {
+        this.autoTerminating = true;
+      }
+    } catch (error) {
+      console.error(`Error initializing worker for ${this.name}:`, error);
       this.workerStatus = "crashed";
-      this.cleanup();
-    });
-
-    this.worker.addEventListener("messageerror", () => {
-      this.workerStatus = "unhealthy";
-    });
-
-    // Handle clean worker exit
-    if (this.options.autoTerminate) {
-      this.autoTerminating = true;
+      throw error;
     }
   }
 
@@ -64,13 +73,25 @@ export class WorkerService extends BaseService {
       this.terminateTimeout = null;
     }
 
+    // Clean up IO and RPC before destroying worker to prevent dangling connections
     if (this.io) {
       try {
         this.io.destroy();
       } catch (error) {
-        // Ignore errors during cleanup
+        console.error(`Error destroying IO for ${this.name}:`, error);
+        // Continue cleanup despite errors
       }
       this.io = null;
+    }
+
+    // Terminate worker if it exists
+    if (this.worker) {
+      try {
+        this.worker.terminate();
+      } catch (error) {
+        console.error(`Error terminating worker for ${this.name}:`, error);
+        // Continue cleanup despite errors
+      }
     }
 
     this.worker = null;
@@ -80,24 +101,25 @@ export class WorkerService extends BaseService {
 
   public async start(): Promise<void> {
     try {
-      this.workerStatus = "starting";
+      // Set status to running right away
+      this.workerStatus = "running";
       this.initWorker();
 
       if (!this.api) {
-        throw new Error("Failed to initialize worker");
+        throw new Error(`Failed to initialize worker for ${this.name}`);
       }
 
+      // Make sure API is ready by calling a method
       await this.api.start();
-      this.workerStatus = "running";
 
       if (this.options.autoTerminate && this.io) {
         // For jobs that are meant to run and exit
         this.workerStatus = "stopping";
-        this.io.destroy();
         this.cleanup();
         this.workerStatus = "stopped";
       }
     } catch (error) {
+      console.error(`Error starting worker service ${this.name}:`, error);
       this.workerStatus = "crashed";
       this.cleanup();
       throw error;
@@ -111,13 +133,19 @@ export class WorkerService extends BaseService {
 
     try {
       this.workerStatus = "stopping";
-      await this.api.stop();
-      if (this.io) {
-        this.io.destroy();
+
+      try {
+        // Attempt to stop gracefully
+        await this.api.stop();
+      } catch (error) {
+        console.error(`Error during API stop for ${this.name}:`, error);
+        // Continue with cleanup even if stop call fails
       }
+
       this.cleanup();
       this.workerStatus = "stopped";
     } catch (error) {
+      console.error(`Error stopping worker service ${this.name}:`, error);
       this.workerStatus = "crashed";
       this.cleanup();
       throw error;
@@ -130,6 +158,7 @@ export class WorkerService extends BaseService {
         // Try to get health check from the worker service itself
         return await this.api.healthCheck();
       } catch (error) {
+        console.error(`Health check failed for ${this.name}:`, error);
         return {
           status: "unhealthy",
           details: { error: String(error) },

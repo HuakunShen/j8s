@@ -1,20 +1,22 @@
-import { expose, type HealthCheckResult, type IService } from "../..";
+import { expose, type HealthCheckResult, type IService } from "../../index";
 
 class WorkerFailureService implements IService {
   name = "workerFailureService";
   private isRunning = false;
   private isStopped = false;
   private startTime = 0;
+  private iterationCount = 0;
 
   async start(): Promise<void> {
     console.log("WorkerFailureService started");
     this.isRunning = true;
     this.isStopped = false;
     this.startTime = Date.now();
-
-    // Long-running task that may randomly fail
+    this.iterationCount = 0;
+    
+    // Long-running task that will likely fail
     await this.runLongRunningTask();
-
+    
     console.log("WorkerFailureService task completed");
   }
 
@@ -29,39 +31,37 @@ class WorkerFailureService implements IService {
       status: this.isRunning ? "running" : "stopped",
       details: {
         uptime: this.isRunning ? (Date.now() - this.startTime) / 1000 : 0,
+        iterations: this.iterationCount,
       },
     };
   }
 
-  // Simulates a long-running task that may fail
+  // Simulates a long-running task that will likely fail
   private async runLongRunningTask(): Promise<void> {
-    let count = 0;
-
     // Run until stopped or until it fails
     while (!this.isStopped) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      count++;
-      console.log(`Worker iteration ${count}`);
-
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      this.iterationCount++;
+      console.log(`Worker iteration ${this.iterationCount}`);
+      
       const random = Math.random();
       console.log(`Worker random number: ${random}`);
-
-      // Randomly fail (for demonstration purposes)
-      if (random < 0.4) {
-        // 10% chance of failure
-        throw new Error(`Worker random failure at iteration ${count}`);
+      
+      // High chance of failure (80%) to test restart policy
+      if (random < 0.8) {
+        throw new Error(`Worker random failure at iteration ${this.iterationCount}`);
       }
-
-      // If we reach 10 iterations, end the task naturally
-      if (count >= 10) {
-        console.log("Worker task completed successfully after 10 iterations");
+      
+      // If we reach 5 iterations, end the task naturally
+      if (this.iterationCount >= 5) {
+        console.log("Worker task completed successfully after 5 iterations");
         return;
       }
     }
-
+    
     console.log("Worker task stopped gracefully");
   }
 }
 
-// Expose the service using the simplified expose function
+// Expose the service for worker thread communication
 expose(new WorkerFailureService());

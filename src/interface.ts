@@ -1,6 +1,5 @@
 export type ServiceStatus =
   | "stopped"
-  | "starting"
   | "running"
   | "stopping"
   | "crashed"
