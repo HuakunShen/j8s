@@ -13,10 +13,10 @@ class WorkerFailureService implements IService {
     this.isStopped = false;
     this.startTime = Date.now();
     this.iterationCount = 0;
-    
+
     // Long-running task that will likely fail
     await this.runLongRunningTask();
-    
+
     console.log("WorkerFailureService task completed");
   }
 
@@ -40,25 +40,27 @@ class WorkerFailureService implements IService {
   private async runLongRunningTask(): Promise<void> {
     // Run until stopped or until it fails
     while (!this.isStopped) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       this.iterationCount++;
       console.log(`Worker iteration ${this.iterationCount}`);
-      
+
       const random = Math.random();
       console.log(`Worker random number: ${random}`);
-      
+
       // High chance of failure (80%) to test restart policy
-      if (random < 0.8) {
-        throw new Error(`Worker random failure at iteration ${this.iterationCount}`);
+      if (random < 0.3) {
+        throw new Error(
+          `Worker random failure at iteration ${this.iterationCount}`
+        );
       }
-      
+
       // If we reach 5 iterations, end the task naturally
       if (this.iterationCount >= 5) {
         console.log("Worker task completed successfully after 5 iterations");
         return;
       }
     }
-    
+
     console.log("Worker task stopped gracefully");
   }
 }

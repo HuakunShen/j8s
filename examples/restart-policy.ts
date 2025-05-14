@@ -5,7 +5,7 @@ class MyService extends BaseService {
   private isStopped = false;
 
   async start(): Promise<void> {
-    console.log("Service started");
+    console.log("Service started - iteration count reset");
     this.isStopped = false;
 
     // Long-running task that continues until stop() is called
@@ -42,7 +42,7 @@ class MyService extends BaseService {
       console.log(`Random number: ${random}`);
       // Randomly fail (for demonstration purposes)
       if (random < 0.4) {
-        // 10% chance of failure
+        // 40% chance of failure
         throw new Error(`Random failure at iteration ${count}`);
       }
 

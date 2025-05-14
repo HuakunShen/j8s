@@ -70,46 +70,34 @@ export class ServiceManager implements IServiceManager {
       throw new Error(`Service '${serviceName}' not found`);
     }
 
-    // Directly move to running when attempting to start
+    // Clear any pending restart
+    if (entry.restartTimer) {
+      clearTimeout(entry.restartTimer);
+      entry.restartTimer = undefined;
+    }
+
+    // Initialize start
+    entry.status = "running";
+
     try {
-      // Try to start the service
-      try {
-        // Set status to running right away - if start() throws, we'll handle it
-        entry.status = "running";
-        await entry.service.start();
-      } catch (error) {
-        // Immediate failure during startup
-        entry.status = "crashed";
+      // Start the service (await immediate errors)
+      await entry.service.start();
 
-        // Only attempt to restart if restart policy allows it
-        if (entry.config.restartPolicy !== "no") {
-          await this.handleServiceFailure(entry, error);
-        }
-
-        throw error; // Re-throw the error for the caller
+      // If service completes normally
+      if (entry.status === "running") {
+        entry.status = "stopped";
+        console.log(`Service '${serviceName}' completed successfully`);
+        entry.restartCount = 0;
       }
-
-      // If we get here, the service started successfully initially
-      // Set up the promise for long-running service monitoring
-      entry.runningPromise = Promise.resolve()
-        .then(() => {
-          // Service completed successfully
-          if (entry.status === "running") {
-            entry.status = "stopped";
-            console.log(`Service '${serviceName}' completed successfully`);
-          }
-        })
-        .catch((error) => {
-          // Service failed after starting
-          if (entry.status === "running") {
-            this.handleServiceFailure(entry, error);
-          }
-        });
-
-      entry.restartCount = 0;
     } catch (error) {
-      // We've already set status to "crashed" in the inner catch block
-      throw error;
+      // Service failed
+      console.error(`Service '${serviceName}' failed:`, error);
+      entry.status = "crashed";
+
+      // Handle restart based on policy
+      if (entry.config.restartPolicy !== "no") {
+        await this.scheduleServiceRestart(entry);
+      }
     }
   }
 
@@ -201,23 +189,10 @@ export class ServiceManager implements IServiceManager {
     return results;
   }
 
-  private async handleServiceFailure(
-    entry: ServiceEntry,
-    error: unknown
-  ): Promise<void> {
+  private async scheduleServiceRestart(entry: ServiceEntry): Promise<void> {
     const { service, config } = entry;
     const policy = config.restartPolicy || "on-failure";
     const maxRetries = config.maxRetries || 3;
-
-    console.error(`Service '${service.name}' failed: ${error}`);
-
-    // Update service status
-    entry.status = "crashed";
-
-    // Don't restart if policy is 'no'
-    if (policy === "no") {
-      return;
-    }
 
     // For 'on-failure', check if we've exceeded maxRetries
     if (policy === "on-failure" && entry.restartCount >= maxRetries) {
@@ -236,7 +211,7 @@ export class ServiceManager implements IServiceManager {
     );
 
     console.log(
-      `Restarting service '${service.name}' in ${delay}ms (attempt ${entry.restartCount + 1})`
+      `Scheduling restart for service '${service.name}' in ${delay}ms (attempt ${entry.restartCount + 1})`
     );
 
     // Clear any existing restart timer
@@ -244,36 +219,34 @@ export class ServiceManager implements IServiceManager {
       clearTimeout(entry.restartTimer);
     }
 
-    // Set up restart timer
-    entry.restartTimer = setTimeout(async () => {
-      entry.restartCount++;
-      entry.restartTimer = undefined;
+    // Use promise to handle the timeout properly
+    await new Promise<void>((resolve) => {
+      entry.restartTimer = setTimeout(() => {
+        entry.restartCount++;
+        entry.restartTimer = undefined;
+        resolve();
+      }, delay);
+    });
 
-      try {
-        // Set status to running right away
-        entry.status = "running";
+    // Directly restart the service after the timer expires
+    console.log(`Actually restarting service '${service.name}' now...`);
+    await this.startService(service.name);
+  }
 
-        // Create the promise for the long-running service
-        entry.runningPromise = entry.service
-          .start()
-          .then(() => {
-            // Service completed successfully
-            if (entry.status === "running") {
-              entry.status = "stopped";
-              console.log(`Service '${service.name}' completed successfully`);
-            }
-          })
-          .catch((error) => {
-            // Service failed
-            if (entry.status === "running") {
-              this.handleServiceFailure(entry, error);
-            }
-          });
-      } catch (err) {
-        entry.status = "crashed";
-        await this.handleServiceFailure(entry, err);
-      }
-    }, delay);
+  private async handleServiceFailure(
+    entry: ServiceEntry,
+    error: unknown
+  ): Promise<void> {
+    const { service } = entry;
+    console.error(`Service '${service.name}' failed: ${error}`);
+
+    // Update service status
+    entry.status = "crashed";
+
+    // Don't restart if policy is 'no'
+    if (entry.config.restartPolicy !== "no") {
+      await this.scheduleServiceRestart(entry);
+    }
   }
 
   private setupCronJob(entry: ServiceEntry): void {
