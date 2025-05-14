@@ -16,12 +16,12 @@ class CounterService implements IService {
     console.log("CounterService started");
     this.running = true;
     this.count = 0;
-    
+
     // Run a counter task
     this.interval = setInterval(() => {
       this.count++;
       console.log(`Count: ${this.count}`);
-      
+
       // Stop when reached max count
       if (this.count >= this.maxCount) {
         this.running = false;
@@ -37,7 +37,7 @@ class CounterService implements IService {
   async stop(): Promise<void> {
     console.log("CounterService stopped");
     this.running = false;
-    
+
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
@@ -57,4 +57,4 @@ class CounterService implements IService {
 }
 
 // Expose the service - no need for manual RPC setup
-expose(new CounterService()); 
+expose(new CounterService());

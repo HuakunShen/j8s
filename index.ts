@@ -83,21 +83,21 @@
  * // worker.ts
  * import { expose } from "j8s";
  * import type { HealthCheckResult, IService } from "j8s";
- * 
+ *
  * class WorkerService implements IService {
  *   name = "worker-service";
  *   private running = false;
- * 
+ *
  *   async start(): Promise<void> {
  *     console.log("Worker service started");
  *     this.running = true;
  *   }
- * 
+ *
  *   async stop(): Promise<void> {
  *     console.log("Worker service stopped");
  *     this.running = false;
  *   }
- * 
+ *
  *   async healthCheck(): Promise<HealthCheckResult> {
  *     return {
  *       status: this.running ? "running" : "stopped",
@@ -107,7 +107,7 @@
  *     };
  *   }
  * }
- * 
+ *
  * // Expose the service - no need for manual RPC setup
  * expose(new WorkerService());
  * ```

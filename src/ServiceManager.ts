@@ -15,6 +15,7 @@ interface ServiceEntry {
   restartTimer?: NodeJS.Timeout;
   cronJob?: CronJob;
   status: ServiceStatus;
+  runningPromise?: Promise<void>;
 }
 
 export class ServiceManager implements IServiceManager {
@@ -72,7 +73,30 @@ export class ServiceManager implements IServiceManager {
     entry.status = "starting";
 
     try {
-      await entry.service.start();
+      // Create the promise for the long-running service
+      entry.runningPromise = entry.service
+        .start()
+        .then(() => {
+          // Service completed successfully
+          if (entry.status === "running") {
+            entry.status = "stopped";
+            console.log(`Service '${serviceName}' completed successfully`);
+          }
+        })
+        .catch((error) => {
+          // Service failed
+          if (entry.status === "running") {
+            this.handleServiceFailure(entry, error);
+          }
+        });
+
+      // Wait for the service to initially start
+      await Promise.race([
+        entry.runningPromise.catch(() => {}),
+        // Short timeout to allow service to initialize but not wait for full completion
+        new Promise((resolve) => setTimeout(resolve, 100)),
+      ]);
+
       entry.status = "running";
       entry.restartCount = 0;
     } catch (error) {
@@ -168,6 +192,9 @@ export class ServiceManager implements IServiceManager {
     return results;
   }
 
+  // No need for reportFailure anymore since failures in the start()
+  // promise are automatically handled
+
   private async handleServiceFailure(
     entry: ServiceEntry,
     error: unknown
@@ -218,7 +245,30 @@ export class ServiceManager implements IServiceManager {
       entry.status = "starting";
 
       try {
-        await service.start();
+        // Create the promise for the long-running service
+        entry.runningPromise = entry.service
+          .start()
+          .then(() => {
+            // Service completed successfully
+            if (entry.status === "running") {
+              entry.status = "stopped";
+              console.log(`Service '${service.name}' completed successfully`);
+            }
+          })
+          .catch((error) => {
+            // Service failed
+            if (entry.status === "running") {
+              this.handleServiceFailure(entry, error);
+            }
+          });
+
+        // Wait for the service to initially start
+        await Promise.race([
+          entry.runningPromise.catch(() => {}),
+          // Short timeout to allow service to initialize but not wait for full completion
+          new Promise((resolve) => setTimeout(resolve, 100)),
+        ]);
+
         entry.status = "running";
       } catch (err) {
         await this.handleServiceFailure(entry, err);
@@ -243,8 +293,31 @@ export class ServiceManager implements IServiceManager {
       async () => {
         try {
           entry.status = "starting";
-          // Start the service, which should auto-terminate if configured that way
-          await service.start();
+
+          // Create the promise for the long-running service
+          entry.runningPromise = service
+            .start()
+            .then(() => {
+              // Service completed successfully
+              if (entry.status === "running") {
+                entry.status = "stopped";
+                console.log(`Service '${service.name}' completed successfully`);
+              }
+            })
+            .catch((error) => {
+              // Service failed
+              if (entry.status === "running") {
+                this.handleServiceFailure(entry, error);
+              }
+            });
+
+          // Wait for the service to initially start
+          await Promise.race([
+            entry.runningPromise.catch(() => {}),
+            // Short timeout to allow service to initialize but not wait for full completion
+            new Promise((resolve) => setTimeout(resolve, 100)),
+          ]);
+
           entry.status = "running";
 
           // If a timeout is specified, ensure the service stops
