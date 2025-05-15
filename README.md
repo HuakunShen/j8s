@@ -64,7 +64,18 @@ import { ServiceManager, createWorkerService } from "j8s";
 const workerService = createWorkerService(
   "worker-service",
   new URL("./path/to/worker.ts", import.meta.url),
-  { autoTerminate: false }
+  {
+    autoTerminate: false,
+    // Pass custom data to the worker
+    workerData: {
+      config: {
+        maxRetries: 5,
+        timeout: 1000,
+        apiKey: "your-api-key",
+      },
+      initialState: "idle",
+    },
+  }
 );
 
 // Add the service with restart policy
@@ -88,15 +99,20 @@ To create a worker service, you need to implement the `IService` interface in th
 // worker.ts
 import { WorkerChildIO, RPCChannel } from "@kunkun/kkrpc";
 import type { IService, HealthCheckResult } from "j8s";
+import { workerData } from "worker_threads";
 
 const io = new WorkerChildIO();
 
 class WorkerService implements IService {
   name = "worker-service";
   private running = false;
+  // Access the custom data passed from the main thread
+  private config = workerData?.config || {};
+  private state = workerData?.initialState || "idle";
 
   async start(): Promise<void> {
-    console.log("Worker service started");
+    console.log("Worker service started with config:", this.config);
+    console.log("Initial state:", this.state);
     this.running = true;
     // Do your initialization here
   }
@@ -112,6 +128,8 @@ class WorkerService implements IService {
       status: this.running ? "running" : "stopped",
       details: {
         // Add custom health check details
+        state: this.state,
+        config: this.config,
       },
     };
   }
@@ -128,14 +146,19 @@ const rpc = new RPCChannel(io, {
 ```typescript
 // worker.ts
 import { expose } from "j8s";
+import { workerData } from "worker_threads";
 import type { IService, HealthCheckResult } from "j8s";
 
 class WorkerService implements IService {
   name = "worker-service";
   private running = false;
+  // Access the custom data passed from the main thread
+  private config = workerData?.config || {};
+  private state = workerData?.initialState || "idle";
 
   async start(): Promise<void> {
-    console.log("Worker service started");
+    console.log("Worker service started with config:", this.config);
+    console.log("Initial state:", this.state);
     this.running = true;
     // Do your initialization here
   }
@@ -151,6 +174,8 @@ class WorkerService implements IService {
       status: this.running ? "running" : "stopped",
       details: {
         // Add custom health check details
+        state: this.state,
+        config: this.config,
       },
     };
   }

@@ -161,6 +161,9 @@ import { WorkerService, type WorkerServiceOptions } from "./src/WorkerService";
  * @param name - The name of the service.
  * @param workerPath - The path to the worker file.
  * @param options - The options for the worker service.
+ * @param options.workerData - Custom data to be passed to the worker, accessible via workerData in the worker thread.
+ * @param options.workerOptions - Options to pass to the Worker constructor.
+ * @param options.autoTerminate - Whether to auto-terminate the worker after start() completes.
  * @returns A new worker-based service that can be added to the service manager.
  */
 export function createWorkerService(

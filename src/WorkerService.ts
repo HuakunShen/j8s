@@ -9,6 +9,7 @@ import { BaseService } from "./BaseService";
 export interface WorkerServiceOptions {
   workerURL: string | URL;
   workerOptions?: WorkerOptions;
+  workerData?: any; // Custom data to be passed to the worker
   autoTerminate?: boolean; // Whether to auto-terminate the worker after start() completes
 }
 
@@ -33,10 +34,15 @@ export class WorkerService extends BaseService {
     this.cleanup();
 
     try {
-      this.worker = new Worker(
-        this.options.workerURL,
-        this.options.workerOptions
-      );
+      // Merge default worker options with custom options and add workerData
+      const workerOptions: WorkerOptions = {
+        ...(this.options.workerOptions || {}),
+        ...(this.options.workerData !== undefined
+          ? { workerData: this.options.workerData }
+          : {}),
+      };
+
+      this.worker = new Worker(this.options.workerURL, workerOptions);
       this.io = new WorkerParentIO(this.worker);
       this.rpc = new RPCChannel<object, IService, DestroyableIoInterface>(
         this.io,
