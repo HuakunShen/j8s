@@ -3,6 +3,9 @@ import {
   WorkerParentIO,
   type DestroyableIoInterface,
 } from "@kunkun/kkrpc";
+// import { Worker } from "node:worker_threads";
+import { Worker as NodeWorker } from "node:worker_threads";
+import type { WorkerOptions } from "node:worker_threads";
 import type { HealthCheckResult, IService, ServiceStatus } from "./interface";
 import { BaseService } from "./BaseService";
 
@@ -14,7 +17,7 @@ export interface WorkerServiceOptions {
 }
 
 export class WorkerService extends BaseService {
-  private worker: Worker | null = null;
+  private worker: NodeWorker | null = null;
   private io: DestroyableIoInterface | null = null;
   private rpc: RPCChannel<object, IService, DestroyableIoInterface> | null =
     null;
@@ -42,8 +45,8 @@ export class WorkerService extends BaseService {
           : {}),
       };
 
-      this.worker = new Worker(this.options.workerURL, workerOptions);
-      this.io = new WorkerParentIO(this.worker);
+      this.worker = new NodeWorker(this.options.workerURL, workerOptions);
+      this.io = new WorkerParentIO(this.worker as any);
       this.rpc = new RPCChannel<object, IService, DestroyableIoInterface>(
         this.io,
         {}
@@ -51,13 +54,22 @@ export class WorkerService extends BaseService {
       this.api = this.rpc.getAPI();
 
       // Monitor worker termination
-      this.worker.addEventListener("error", (event) => {
+      this.worker.addListener("error", (event) => {
         console.error(`Worker error event for ${this.name}:`, event);
         this.workerStatus = "crashed";
         this.cleanup();
       });
+      // this.worker.addEventListener("error", (event) => {
+      //   console.error(`Worker error event for ${this.name}:`, event);
+      //   this.workerStatus = "crashed";
+      //   this.cleanup();
+      // });
 
-      this.worker.addEventListener("messageerror", (event) => {
+      // this.worker.addEventListener("messageerror", (event) => {
+      //   console.error(`Worker message error for ${this.name}:`, event);
+      //   this.workerStatus = "unhealthy";
+      // });
+      this.worker.addListener("messageerror", (event) => {
         console.error(`Worker message error for ${this.name}:`, event);
         this.workerStatus = "unhealthy";
       });
