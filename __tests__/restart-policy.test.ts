@@ -33,6 +33,12 @@ class MockService extends BaseService {
         `Service ${this.name} failed to start (attempt ${this.failCount})`
       );
     }
+
+    // For services that succeed, keep them running indefinitely
+    // This simulates a long-running service
+    return new Promise(() => {
+      // Never resolve - service stays running
+    });
   }
 
   async stop(): Promise<void> {
@@ -61,8 +67,17 @@ class TestServiceManager extends ServiceManager {
     entry.status = "running"; // Set status directly to running
 
     try {
-      await entry.service.start();
-      // Status is already "running", no need to change
+      // Don't await the start method for long-running services
+      const startPromise = entry.service.start();
+      
+      // Give it a short time to see if it fails immediately
+      await Promise.race([
+        startPromise,
+        new Promise(resolve => setTimeout(resolve, 100))
+      ]);
+      
+      // If we get here and the service didn't fail, it's running successfully
+      entry.restartCount = 0;
     } catch (error) {
       entry.status = "crashed"; // Failure - set to crashed
     }

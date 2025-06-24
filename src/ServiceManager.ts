@@ -116,6 +116,9 @@ export class ServiceManager implements IServiceManager {
         throw new Error(`Service '${serviceName}' failed to start`);
       }
 
+      // Reset restart count on successful start
+      entry.restartCount = 0;
+
     } catch (error) {
       // Service failed immediately
       console.error(`Service '${serviceName}' failed:`, error);
@@ -152,6 +155,8 @@ export class ServiceManager implements IServiceManager {
     try {
       await entry.service.stop();
       entry.status = "stopped";
+      // Reset restart count when manually stopping service
+      entry.restartCount = 0;
     } catch (error) {
       console.error(`Error stopping service '${serviceName}':`, error);
       entry.status = "crashed";
