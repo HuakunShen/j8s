@@ -7,6 +7,7 @@ import { createServiceManagerAPI } from "../api";
 // Create a demo service by extending BaseService
 class DemoService extends BaseService {
   private intervalId?: NodeJS.Timeout;
+  private isRunning = false;
 
   constructor(name: string) {
     super(name);
@@ -20,15 +21,31 @@ class DemoService extends BaseService {
 
     // Service is now running
     console.log(`${this.name} is now running`);
+    this.isRunning = true;
 
     // Setup interval for simulated work
     this.intervalId = setInterval(() => {
       console.log(`${this.name} is doing work...`);
     }, 5000);
+
+    // For long-running services, we need to keep the promise alive
+    // This creates a promise that only resolves when stop() is called
+    return new Promise<void>((resolve) => {
+      const checkStop = () => {
+        if (!this.isRunning) {
+          resolve();
+        } else {
+          setTimeout(checkStop, 100);
+        }
+      };
+      checkStop();
+    });
   }
 
   async stop(): Promise<void> {
     console.log(`${this.name} stopping...`);
+    
+    this.isRunning = false;
 
     // Clear interval if exists
     if (this.intervalId) {
