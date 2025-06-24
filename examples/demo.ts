@@ -135,6 +135,7 @@ async function runDemo() {
   // Start all services
   console.log("Starting all services...");
   await manager.startAllServices();
+  console.log("All services started!");
 
   // Monitor health
   setInterval(async () => {

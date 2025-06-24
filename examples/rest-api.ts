@@ -93,7 +93,7 @@ const app = createServiceManagerAPI(serviceManager, {
 });
 
 // Start the HTTP server
-const port = 3000;
+const port = 3200;
 console.log(`Starting REST API server on port ${port}`);
 
 // Use the Hono node server adapter
@@ -106,16 +106,21 @@ console.log(`
 REST API is now available at http://localhost:${port}
 
 Available endpoints:
-- GET    /services              - List all services
-- GET    /services/:name        - Get service details
-- GET    /services/:name/health - Get service health
-- POST   /services/:name/start  - Start a service
-- POST   /services/:name/stop   - Stop a service
-- POST   /services/:name/restart - Restart a service
-- DELETE /services/:name        - Remove a service
-- GET    /health                - Get health for all services
-- POST   /services/start-all    - Start all services
-- POST   /services/stop-all     - Stop all services
+- GET    /api/services              - List all services
+- GET    /api/services/:name        - Get service details
+- GET    /api/services/:name/health - Get service health
+- POST   /api/services/:name/start  - Start a service
+- POST   /api/services/:name/stop   - Stop a service
+- POST   /api/services/:name/restart - Restart a service
+- DELETE /api/services/:name        - Remove a service
+- GET    /api/health                - Get health for all services
+- POST   /api/services/start-all    - Start all services
+- POST   /api/services/stop-all     - Stop all services
+
+Web UI available at:
+- GET    /                          - Service management dashboard
+- GET    /openapi                   - OpenAPI specification
+- GET    /scalar                    - API documentation
 `);
 
 // Start services A and B

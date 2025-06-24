@@ -173,7 +173,7 @@ export function createWorkerService(
 ): WorkerService {
   const fullOptions: WorkerServiceOptions = {
     workerURL: workerPath,
-    workerOptions: { type: "module" },
+    workerOptions: {},
     autoTerminate: false,
     ...options,
   };

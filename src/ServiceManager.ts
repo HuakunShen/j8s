@@ -80,17 +80,44 @@ export class ServiceManager implements IServiceManager {
     entry.status = "running";
 
     try {
-      // Start the service (await immediate errors)
-      await entry.service.start();
+      // For long-running services, don't await the start method
+      // Instead, start it asynchronously and handle errors
+      const startPromise = entry.service.start();
+      
+      // Store the promise for potential cleanup
+      entry.runningPromise = startPromise;
+      
+      // Handle the promise asynchronously
+      startPromise
+        .then(() => {
+          // Service completed successfully
+          if (entry.status === "running") {
+            entry.status = "stopped";
+            console.log(`Service '${serviceName}' completed successfully`);
+            entry.restartCount = 0;
+          }
+        })
+        .catch((error) => {
+          // Service failed
+          console.error(`Service '${serviceName}' failed:`, error);
+          entry.status = "crashed";
 
-      // If service completes normally
-      if (entry.status === "running") {
-        entry.status = "stopped";
-        console.log(`Service '${serviceName}' completed successfully`);
-        entry.restartCount = 0;
+          // Handle restart based on policy
+          if (entry.config.restartPolicy !== "no") {
+            this.scheduleServiceRestart(entry);
+          }
+        });
+
+      // Wait a short time to catch immediate startup errors
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Check if the service is still running (not crashed)
+      if (entry.status !== "running") {
+        throw new Error(`Service '${serviceName}' failed to start`);
       }
+
     } catch (error) {
-      // Service failed
+      // Service failed immediately
       console.error(`Service '${serviceName}' failed:`, error);
       entry.status = "crashed";
 
@@ -98,6 +125,8 @@ export class ServiceManager implements IServiceManager {
       if (entry.config.restartPolicy !== "no") {
         await this.scheduleServiceRestart(entry);
       }
+      
+      throw error;
     }
   }
 
