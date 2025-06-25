@@ -27,7 +27,7 @@
     "@scalar/hono-api-reference": "^0.8.9",
     "@valibot/to-json-schema": "^1.1.0",
     "cron": "^4.3.0",
-    "hono": "^4.7.9",
+    "hono": "^4.8.3",
     "hono-openapi": "^0.4.8",
     "valibot": "^1.1.0"
   }
