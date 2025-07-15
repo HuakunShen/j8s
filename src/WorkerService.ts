@@ -45,7 +45,7 @@ export class WorkerService extends BaseService {
           : {}),
       };
 
-      this.worker = new NodeWorker(this.options.workerURL, workerOptions);
+      this.worker = new NodeWorker(this.options.workerURL.toString(), workerOptions);
       this.io = new WorkerParentIO(this.worker as any);
       this.rpc = new RPCChannel<object, IService, DestroyableIoInterface>(
         this.io,
@@ -170,7 +170,7 @@ export class WorkerService extends BaseService {
     }
   }
 
-  public async healthCheck(): Promise<HealthCheckResult> {
+  public override async healthCheck(): Promise<HealthCheckResult> {
     if (this.workerStatus === "running" && this.api) {
       try {
         // Try to get health check from the worker service itself
