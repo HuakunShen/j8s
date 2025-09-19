@@ -45,23 +45,35 @@ export class ServiceManager implements IServiceManager {
     }
   }
 
-  public removeService(serviceName: string): void {
+  public async removeService(serviceName: string): Promise<void> {
     const entry = this.serviceMap.get(serviceName);
     if (!entry) {
       return;
     }
 
-    // Clean up any timers
-    if (entry.restartTimer) {
-      clearTimeout(entry.restartTimer);
-    }
+    try {
+      // Stop the service first if it's running
+      if (entry.status === "running" || entry.status === "stopping") {
+        await this.stopService(serviceName);
+      }
 
-    // Stop any active cron job
-    if (entry.cronJob) {
-      entry.cronJob.stop();
-    }
+      // Clean up any timers
+      if (entry.restartTimer) {
+        clearTimeout(entry.restartTimer);
+      }
 
-    this.serviceMap.delete(serviceName);
+      // Stop any active cron job
+      if (entry.cronJob) {
+        entry.cronJob.stop();
+      }
+
+      this.serviceMap.delete(serviceName);
+    } catch (error) {
+      console.error(`Error removing service '${serviceName}':`, error);
+      // Still remove from map even if stop fails to prevent orphaned entries
+      this.serviceMap.delete(serviceName);
+      throw error;
+    }
   }
 
   public async startService(serviceName: string): Promise<void> {
@@ -83,10 +95,10 @@ export class ServiceManager implements IServiceManager {
       // For long-running services, don't await the start method
       // Instead, start it asynchronously and handle errors
       const startPromise = entry.service.start();
-      
+
       // Store the promise for potential cleanup
       entry.runningPromise = startPromise;
-      
+
       // Handle the promise asynchronously
       startPromise
         .then(() => {
@@ -109,8 +121,8 @@ export class ServiceManager implements IServiceManager {
         });
 
       // Wait a short time to catch immediate startup errors
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Check if the service is still running (not crashed)
       if (entry.status !== "running") {
         throw new Error(`Service '${serviceName}' failed to start`);
@@ -118,7 +130,6 @@ export class ServiceManager implements IServiceManager {
 
       // Reset restart count on successful start
       entry.restartCount = 0;
-
     } catch (error) {
       // Service failed immediately
       console.error(`Service '${serviceName}' failed:`, error);
@@ -128,7 +139,7 @@ export class ServiceManager implements IServiceManager {
       if (entry.config.restartPolicy !== "no") {
         await this.scheduleServiceRestart(entry);
       }
-      
+
       throw error;
     }
   }
@@ -153,13 +164,20 @@ export class ServiceManager implements IServiceManager {
     entry.status = "stopping";
 
     try {
-      await entry.service.stop();
+      // Add timeout for stop operation to prevent hanging
+      await Promise.race([
+        entry.service.stop(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Service stop timeout")), 10000)
+        ),
+      ]);
       entry.status = "stopped";
       // Reset restart count when manually stopping service
       entry.restartCount = 0;
     } catch (error) {
       console.error(`Error stopping service '${serviceName}':`, error);
       entry.status = "crashed";
+      throw error; // Re-throw to allow caller to handle
     }
   }
 
