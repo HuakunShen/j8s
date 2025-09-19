@@ -1,98 +1,76 @@
 import { describe, expect, it } from "bun:test";
-import { BaseService, ServiceManager } from "../index";
-import type { HealthCheckResult } from "../src/interface";
+import { Duration, Effect } from "effect";
+import { ServiceManager } from "../index";
+import type { HealthCheckResult, IService } from "../src/interface";
 
-// Silence the deprecation warnings during tests
-// console.warn = () => {};
+class MockService implements IService {
+  public failCount = 0;
+  public startCalls = 0;
+  private shouldFail = false;
+  private failTimes = 0;
 
-// Mock implementation of a service that can be configured to fail
-class MockService extends BaseService {
-  private failCount: number = 0;
-  private shouldFail: boolean = false;
-  private failTimes: number = 0;
-  public startCalls: number = 0;
+  constructor(public readonly name: string) {}
 
-  constructor(name: string) {
-    super(name);
-  }
-
-  // Configure the service to fail a certain number of times before succeeding
   public setFailure(shouldFail: boolean, failTimes: number = Infinity): void {
     this.shouldFail = shouldFail;
     this.failTimes = failTimes;
     this.failCount = 0;
   }
 
-  async start(): Promise<void> {
-    this.startCalls++;
+  public start(): Effect.Effect<void, unknown> {
+    const self = this;
+    return Effect.gen(function* () {
+      self.startCalls++;
 
-    // If configured to fail and we haven't exceeded failTimes
-    if (this.shouldFail && this.failCount < this.failTimes) {
-      this.failCount++;
-      throw new Error(
-        `Service ${this.name} failed to start (attempt ${this.failCount})`
-      );
-    }
+      if (self.shouldFail && self.failCount < self.failTimes) {
+        self.failCount++;
+        yield* Effect.fail(
+          new Error(
+            `Service ${self.name} failed to start (attempt ${self.failCount})`
+          )
+        );
+      }
 
-    // For services that succeed, keep them running indefinitely
-    // This simulates a long-running service
-    return new Promise(() => {
-      // Never resolve - service stays running
+      yield* Effect.never;
     });
   }
 
-  async stop(): Promise<void> {
-    // No implementation needed for tests
+  public stop(): Effect.Effect<void, unknown> {
+    return Effect.void;
   }
 
-  async healthCheck(): Promise<HealthCheckResult> {
-    return {
-      status: "stopped", // This will be overridden by ServiceManager
+  public healthCheck(): Effect.Effect<HealthCheckResult, unknown> {
+    return Effect.succeed({
+      status: "stopped",
       details: {
         failCount: this.failCount,
         startCalls: this.startCalls,
       },
-    };
+    });
   }
 }
 
-// Override the handleServiceFailure method in ServiceManager to immediately restart the service
-// instead of using timers for our tests
-class TestServiceManager extends ServiceManager {
-  public async forceServiceRestart(serviceName: string): Promise<void> {
-    const entry = (this as any).serviceMap.get(serviceName);
-    if (!entry) return;
+class CompletingService implements IService {
+  public starts = 0;
+  constructor(public readonly name: string) {}
 
-    entry.restartCount++;
-    entry.status = "running"; // Set status directly to running
-
-    try {
-      // Don't await the start method for long-running services
-      const startPromise = entry.service.start();
-      
-      // Give it a short time to see if it fails immediately
-      await Promise.race([
-        startPromise,
-        new Promise(resolve => setTimeout(resolve, 100))
-      ]);
-      
-      // If we get here and the service didn't fail, it's running successfully
-      entry.restartCount = 0;
-    } catch (error) {
-      entry.status = "crashed"; // Failure - set to crashed
-    }
+  public start(): Effect.Effect<void, unknown> {
+    this.starts++;
+    return Effect.void;
   }
 
-  // Helper method to get service status for testing
-  public async getServiceStatus(serviceName: string): Promise<string> {
-    const health = await this.healthCheckService(serviceName);
-    return health.status;
+  public stop(): Effect.Effect<void, unknown> {
+    return Effect.void;
+  }
+
+  public healthCheck(): Effect.Effect<HealthCheckResult, unknown> {
+    return Effect.succeed({ status: "stopped" });
   }
 }
 
 describe("ServiceManager - Restart Policy", () => {
   it('should not restart service when policy is "no"', async () => {
-    const manager = new ServiceManager();
+    const manager = new ServiceManager({ backoffBaseMs: 5, backoffMaxMs: 5 });
     const service = new MockService("no-restart");
     service.setFailure(true, 1);
 
@@ -100,89 +78,116 @@ describe("ServiceManager - Restart Policy", () => {
       restartPolicy: "no",
     });
 
-    // Start service, it will fail
     try {
-      await manager.startService("no-restart");
-    } catch (error) {
-      // Expected to fail
+      await Effect.runPromise(manager.startService("no-restart"));
+    } catch {
+      // expected failure
     }
 
-    const health = await manager.healthCheckService("no-restart");
+    const health: HealthCheckResult = await Effect.runPromise(
+      manager.healthCheckService("no-restart")
+    );
+
     expect(health.status).toBe("crashed");
-    expect(service.startCalls).toBe(1); // Should only be called once
+    expect(service.startCalls).toBe(1);
   });
 
   it("service restarts respect maxRetries", async () => {
-    const manager = new TestServiceManager();
+    const manager = new ServiceManager({ backoffBaseMs: 5, backoffMaxMs: 5 });
     const service = new MockService("max-retries");
-    service.setFailure(true, 10); // Will always fail for our test
+    service.setFailure(true, 10);
 
     manager.addService(service, {
       restartPolicy: "on-failure",
-      maxRetries: 2, // Only allow 2 retries
+      maxRetries: 2,
     });
 
-    // Initial start
     try {
-      await manager.startService("max-retries");
-    } catch (error) {
-      // Expected to fail
+      await Effect.runPromise(manager.startService("max-retries"));
+    } catch {
+      // expected
     }
 
-    // Manually trigger restarts to simulate timer callbacks
-    await manager.forceServiceRestart("max-retries");
-    await manager.forceServiceRestart("max-retries");
+    await Effect.runPromise(Effect.sleep(Duration.millis(40)));
 
-    // The service should have been called 3 times total (initial + 2 retries)
-    // The force method doesn't check maxRetries, so let's just verify we have at least 3 calls
-    expect(service.startCalls).toBeGreaterThanOrEqual(3);
+    const health: HealthCheckResult = await Effect.runPromise(
+      manager.healthCheckService("max-retries")
+    );
 
-    // Service should be in crashed state
-    const status = await manager.getServiceStatus("max-retries");
-    expect(status).toBe("crashed");
+    expect(service.startCalls).toBe(3);
+    expect(health.status).toBe("crashed");
   });
 
   it("should reset restart count after successful start", async () => {
-    const manager = new TestServiceManager();
+    const manager = new ServiceManager({ backoffBaseMs: 5, backoffMaxMs: 5 });
     const service = new MockService("reset-count");
-    service.setFailure(true, 1); // Will fail once then succeed
+    service.setFailure(true, 1);
 
     manager.addService(service, {
       restartPolicy: "on-failure",
       maxRetries: 3,
     });
 
-    // Initial start (will fail)
     try {
-      await manager.startService("reset-count");
-    } catch (error) {
-      // Expected to fail
+      await Effect.runPromise(manager.startService("reset-count"));
+    } catch {
+      // expected
     }
 
-    // Manually trigger restart
-    await manager.forceServiceRestart("reset-count");
+    await Effect.runPromise(Effect.sleep(Duration.millis(40)));
 
-    // Service should now be running
-    const status1 = await manager.getServiceStatus("reset-count");
-    expect(status1).toBe("running");
+    let health: HealthCheckResult = await Effect.runPromise(
+      manager.healthCheckService("reset-count")
+    );
+    expect(health.status).toBe("running");
 
-    // Now make it fail again
     service.setFailure(true, 1);
-
-    // Stop and start the service
-    await manager.stopService("reset-count");
+    await Effect.runPromise(manager.stopService("reset-count"));
 
     try {
-      await manager.startService("reset-count");
-    } catch (error) {
-      // Expected to fail
+      await Effect.runPromise(manager.startService("reset-count"));
+    } catch {
+      // expected
     }
 
-    // Should be able to restart again since the count was reset
-    await manager.forceServiceRestart("reset-count");
+    await Effect.runPromise(Effect.sleep(Duration.millis(40)));
 
-    // Service should be running again
-    const status2 = await manager.getServiceStatus("reset-count");
-    expect(status2).toBe("running");
+    health = await Effect.runPromise(manager.healthCheckService("reset-count"));
+    expect(health.status).toBe("running");
+  });
+
+  it("allows short-lived services to complete without throwing", async () => {
+    const manager = new ServiceManager();
+    const service = new CompletingService("short-lived");
+
+    manager.addService(service, { restartPolicy: "no" });
+
+    await expect(
+      Effect.runPromise(manager.startService("short-lived"))
+    ).resolves.toBeUndefined();
+
+    const health: HealthCheckResult = await Effect.runPromise(
+      manager.healthCheckService("short-lived")
+    );
+    expect(health.status).toBe("stopped");
+    expect(service.starts).toBe(1);
+  });
+
+  it('restarts services with policy "always" after completion', async () => {
+    const manager = new ServiceManager({ backoffBaseMs: 5, backoffMaxMs: 5 });
+    const service = new CompletingService("always-service");
+
+    manager.addService(service, { restartPolicy: "always" });
+
+    await Effect.runPromise(manager.startService("always-service"));
+    await Effect.runPromise(Effect.sleep(Duration.millis(40)));
+
+    expect(service.starts).toBeGreaterThanOrEqual(2);
+
+    await Effect.runPromise(manager.stopService("always-service"));
+    const health: HealthCheckResult = await Effect.runPromise(
+      manager.healthCheckService("always-service")
+    );
+    expect(health.status).toBe("stopped");
   });
 });

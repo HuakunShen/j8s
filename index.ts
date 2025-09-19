@@ -10,23 +10,19 @@
  * import { BaseService, ServiceManager } from "j8s";
  *
  * class MyService extends BaseService {
- *   async start(): Promise<void> {
- *     console.log("Service started");
+ *   protected onStart() {
+ *     return Effect.sync(() => console.log("Service started"));
  *   }
  *
- *   async stop(): Promise<void> {
- *     console.log("Service stopped");
- *   }
- *
- *   async healthCheck(): Promise<HealthCheckResult> {
- *     return { status: "running" };
+ *   protected onStop() {
+ *     return Effect.sync(() => console.log("Service stopped"));
  *   }
  * }
  *
  * const manager = new ServiceManager();
  * const myService = new MyService("my-service");
  * manager.addService(myService, { restartPolicy: "always" });
- * await manager.startService(myService);
+ * await Effect.runPromise(manager.startService("my-service"));
  * ```
  *
  * @example
@@ -45,7 +41,7 @@
  *   restartPolicy: "on-failure",
  *   maxRetries: 3,
  * });
- * await manager.startService(workerService);
+ * await Effect.runPromise(manager.startService("worker-service"));
  * ```
  *
  * @example
@@ -54,15 +50,12 @@
  * import { BaseService, ServiceManager } from "j8s";
  *
  * class BackupService extends BaseService {
- *   async start(): Promise<void> {
- *     console.log("Running backup...");
- *     // Do backup logic here
+ *   protected onStart() {
+ *     return Effect.sync(() => console.log("Running backup..."));
  *   }
  *
- *   async stop(): Promise<void> {}
- *
- *   async healthCheck(): Promise<HealthCheckResult> {
- *     return { status: "running" };
+ *   protected onStop() {
+ *     return Effect.void;
  *   }
  * }
  *
@@ -88,23 +81,24 @@
  *   name = "worker-service";
  *   private running = false;
  *
- *   async start(): Promise<void> {
- *     console.log("Worker service started");
- *     this.running = true;
+ *   start() {
+ *     return Effect.sync(() => {
+ *       console.log("Worker service started");
+ *       this.running = true;
+ *     });
  *   }
  *
- *   async stop(): Promise<void> {
- *     console.log("Worker service stopped");
- *     this.running = false;
+ *   stop() {
+ *     return Effect.sync(() => {
+ *       console.log("Worker service stopped");
+ *       this.running = false;
+ *     });
  *   }
  *
- *   async healthCheck(): Promise<HealthCheckResult> {
- *     return {
+ *   healthCheck() {
+ *     return Effect.succeed({
  *       status: this.running ? "running" : "stopped",
- *       details: {
- *         // Custom health check details
- *       },
- *     };
+ *     });
  *   }
  * }
  *
@@ -135,6 +129,13 @@ export { BaseService } from "./src/BaseService";
  * Service manager for managing all services.
  */
 export { ServiceManager } from "./src/ServiceManager";
+export type { ServiceManagerOptions } from "./src/ServiceManager";
+
+/**
+ * Helper to build an IService from plain Effect functions.
+ */
+export { createService } from "./src/createService";
+export type { ServiceDefinition } from "./src/createService";
 
 /**
  * Worker service for running services in a worker thread.

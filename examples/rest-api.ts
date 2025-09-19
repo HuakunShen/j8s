@@ -1,6 +1,7 @@
 // Imports
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { Duration, Effect } from "effect";
 import { ServiceManager, BaseService, type HealthCheckResult } from "..";
 import { createServiceManagerAPI } from "../api";
 
@@ -13,59 +14,44 @@ class DemoService extends BaseService {
     super(name);
   }
 
-  async start(): Promise<void> {
-    console.log(`${this.name} starting...`);
+  protected onStart() {
+    return Effect.gen(function* (this: DemoService) {
+      console.log(`${this.name} starting...`);
 
-    // Simulate some initialization work
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      yield* Effect.sleep(Duration.seconds(1));
 
-    // Service is now running
-    console.log(`${this.name} is now running`);
-    this.isRunning = true;
+      console.log(`${this.name} is now running`);
+      this.isRunning = true;
 
-    // Setup interval for simulated work
-    this.intervalId = setInterval(() => {
-      console.log(`${this.name} is doing work...`);
-    }, 5000);
+      this.intervalId = setInterval(() => {
+        console.log(`${this.name} is doing work...`);
+      }, 5000);
 
-    // For long-running services, we need to keep the promise alive
-    // This creates a promise that only resolves when stop() is called
-    return new Promise<void>((resolve) => {
-      const checkStop = () => {
-        if (!this.isRunning) {
-          resolve();
-        } else {
-          setTimeout(checkStop, 100);
-        }
-      };
-      checkStop();
+      yield* Effect.never;
+    }.bind(this));
+  }
+
+  protected onStop() {
+    return Effect.try(() => {
+      console.log(`${this.name} stopping...`);
+      this.isRunning = false;
+
+      if (this.intervalId) {
+        clearInterval(this.intervalId);
+        this.intervalId = undefined;
+      }
+
+      console.log(`${this.name} stopped`);
     });
   }
 
-  async stop(): Promise<void> {
-    console.log(`${this.name} stopping...`);
-    
-    this.isRunning = false;
-
-    // Clear interval if exists
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = undefined;
-    }
-
-    // Simulate cleanup work
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    console.log(`${this.name} stopped`);
-  }
-
-  async healthCheck(): Promise<HealthCheckResult> {
-    return {
-      status: "running", // Placeholder; ServiceManager will override
+  protected override onHealthCheck() {
+    return Effect.succeed<HealthCheckResult>({
+      status: this.isRunning ? "running" : "stopped",
       details: {
         uptime: Math.floor(Math.random() * 1000),
       },
-    };
+    });
   }
 }
 
@@ -141,4 +127,4 @@ Web UI available at:
 `);
 
 // Start services A and B
-serviceManager.startService("service-a");
+Effect.runFork(serviceManager.startService("service-a"));

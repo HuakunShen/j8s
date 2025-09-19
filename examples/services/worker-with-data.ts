@@ -1,3 +1,4 @@
+import { Duration, Effect } from "effect";
 import { expose, type HealthCheckResult, type IService } from "../../index";
 import { workerData } from "worker_threads";
 
@@ -25,24 +26,27 @@ class WorkerWithDataService implements IService {
     });
   }
 
-  async start(): Promise<void> {
-    console.log(`WorkerWithDataService started in ${this.mode} mode`);
-    this.isRunning = true;
-    this.startTime = Date.now();
-    this.iterationCount = 0;
+  start() {
+    return Effect.gen(this, function* () {
+      console.log(`WorkerWithDataService started in ${this.mode} mode`);
+      this.isRunning = true;
+      this.startTime = Date.now();
+      this.iterationCount = 0;
 
-    // Start the task with custom configuration
-    console.log("WorkerWithDataService task started");
-    await this.runTask();
+      console.log("WorkerWithDataService task started");
+      yield* this.runTask();
+    });
   }
 
-  async stop(): Promise<void> {
-    console.log("WorkerWithDataService stopping");
-    this.isRunning = false;
+  stop() {
+    return Effect.sync(() => {
+      console.log("WorkerWithDataService stopping");
+      this.isRunning = false;
+    });
   }
 
-  async healthCheck(): Promise<HealthCheckResult> {
-    return {
+  healthCheck() {
+    return Effect.succeed<HealthCheckResult>({
       status: this.isRunning ? "running" : "stopped",
       details: {
         uptime: this.isRunning ? (Date.now() - this.startTime) / 1000 : 0,
@@ -54,25 +58,26 @@ class WorkerWithDataService implements IService {
         },
         mode: this.mode,
       },
-    };
+    });
   }
 
   // Run a task using the configuration provided through workerData
-  private async runTask(): Promise<void> {
-    while (this.isRunning && this.iterationCount < this.maxIterations) {
-      this.iterationCount++;
+  private runTask() {
+    return Effect.gen(this, function* () {
+      while (this.isRunning && this.iterationCount < this.maxIterations) {
+        this.iterationCount++;
 
-      if (this.mode === "verbose") {
-        console.log(
-          `[${this.iterationCount}/${this.maxIterations}] ${this.message}`
-        );
+        if (this.mode === "verbose") {
+          console.log(
+            `[${this.iterationCount}/${this.maxIterations}] ${this.message}`
+          );
+        }
+
+        yield* Effect.sleep(Duration.millis(this.delay));
       }
 
-      // Simulate work
-      await new Promise((resolve) => setTimeout(resolve, this.delay));
-    }
-
-    console.log(`Task completed after ${this.iterationCount} iterations`);
+      console.log(`Task completed after ${this.iterationCount} iterations`);
+    });
   }
 }
 

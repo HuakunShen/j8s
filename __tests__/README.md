@@ -27,20 +27,16 @@ bun test:watch
 
 ### Restart Policy Tests
 
-The restart policy tests use a `MockService` class that can be configured to fail a set number of times before succeeding. This allows us to test different restart behaviors:
+The restart policy suite uses Effect-based mock services to validate different behaviours:
 
-1. **No restart policy**: Services should not be restarted when they fail
-2. **Max retries**: Services should be restarted up to the maximum number of retries when using the "on-failure" policy
-3. **Restart count reset**: The restart count should be reset after a successful start
+1. **`"no"` policy** – ensure services are not restarted after a crash
+2. **`"on-failure"` with `maxRetries`** – verify exponential back-off limits restart attempts
+3. **Restart counter reset** – confirm the counter resets after a successful run
+4. **Short-lived services** – immediate completions should not be treated as startup failures
+5. **`"always"` policy** – successful completions trigger an automatic restart
 
-To facilitate testing without timers, a `TestServiceManager` class is used to directly trigger service restarts.
+Each assertion uses `Effect.runPromise`, so the tests execute the same code paths as production consumers.
 
 ### Cron Job Tests
 
-The cron job tests verify that:
-
-1. Services can be added with cron configuration
-2. Cron jobs are properly managed when services are stopped
-3. Cron jobs are removed when services are removed
-
-These tests focus on the integration between the ServiceManager and the cron module, ensuring that cron jobs are properly created, started, and stopped.
+Cron tests focus on registration, removal and manual stopping of scheduled services. They use a lightweight Effect service that simply counts `start`/`stop` invocations.

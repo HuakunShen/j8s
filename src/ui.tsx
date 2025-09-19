@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { FC } from "hono/jsx";
-import type { IServiceManager } from "./interface";
+import { Effect } from "effect";
+import type { HealthCheckResult, IServiceManager } from "./interface";
 
 const ui = new Hono();
 
@@ -209,15 +210,19 @@ const Dashboard: FC<{ services: any[] }> = (props) => {
 // Create UI routes
 export function createServiceManagerUI(serviceManager: IServiceManager): Hono {
   ui.get("/", async (c) => {
-    const services = await Promise.all(
-      serviceManager.services.map(async (service) => {
-        const health = await serviceManager.healthCheckService(service.name);
-        return {
-          name: service.name,
-          status: health.status,
-          health,
-        };
-      })
+    const services = await Effect.runPromise(
+      Effect.forEach(
+        serviceManager.services,
+        (service) =>
+          serviceManager.healthCheckService(service.name).pipe(
+            Effect.map((health: HealthCheckResult) => ({
+              name: service.name,
+              status: health.status,
+              health,
+            }))
+          ),
+        { concurrency: "unbounded" }
+      )
     );
 
     return c.html(<Dashboard services={services} />);

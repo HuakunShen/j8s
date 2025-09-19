@@ -3,7 +3,8 @@ import {
   WorkerChildIO,
   type DestroyableIoInterface,
 } from "@kunkun/kkrpc";
-import type { IService } from "./interface";
+import { Effect } from "effect";
+import type { IService, IServiceRPC } from "./interface";
 
 /**
  * Exposes a service implementation in a worker thread.
@@ -21,23 +22,27 @@ import type { IService } from "./interface";
  *   name = "worker-service";
  *   private running = false;
  *
- *   async start(): Promise<void> {
- *     console.log("Worker service started");
- *     this.running = true;
+ *   start() {
+ *     return Effect.sync(() => {
+ *       console.log("Worker service started");
+ *       this.running = true;
+ *     });
  *   }
  *
- *   async stop(): Promise<void> {
- *     console.log("Worker service stopped");
- *     this.running = false;
+ *   stop() {
+ *     return Effect.sync(() => {
+ *       console.log("Worker service stopped");
+ *       this.running = false;
+ *     });
  *   }
  *
- *   async healthCheck(): Promise<HealthCheckResult> {
- *     return {
+ *   healthCheck() {
+ *     return Effect.succeed<HealthCheckResult>({
  *       status: this.running ? "running" : "stopped",
  *       details: {
  *         // Custom health check details
  *       },
- *     };
+ *     });
  *   }
  * }
  *
@@ -49,7 +54,11 @@ export function expose(service: IService): void {
   const io: DestroyableIoInterface = new WorkerChildIO();
 
   // Create RPC channel and expose the service
-  const rpc = new RPCChannel<IService, object, DestroyableIoInterface>(io, {
-    expose: service,
+  const rpc = new RPCChannel<IServiceRPC, object, DestroyableIoInterface>(io, {
+    expose: {
+      start: () => Effect.runPromise(service.start()),
+      stop: () => Effect.runPromise(service.stop()),
+      healthCheck: () => Effect.runPromise(service.healthCheck()),
+    },
   });
 }

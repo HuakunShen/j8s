@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from "bun:test";
+import { Effect } from "effect";
 import { BaseService, ServiceManager } from "../index";
+import type { HealthCheckResult } from "../src/interface";
 
 // Silence the deprecation warnings during tests
 console.warn = () => {};
@@ -13,12 +15,14 @@ class CronTestService extends BaseService {
     super(name);
   }
 
-  async start(): Promise<void> {
+  protected onStart() {
     this.startCount++;
+    return Effect.void;
   }
 
-  async stop(): Promise<void> {
+  protected onStop() {
     this.stopCount++;
+    return Effect.void;
   }
 }
 
@@ -55,10 +59,12 @@ describe("ServiceManager - Cron Jobs", () => {
     });
 
     // Stop service
-    await manager.stopService("cron-test");
+    await Effect.runPromise(manager.stopService("cron-test"));
 
     // Check service status
-    const health = await manager.healthCheckService("cron-test");
+    const health: HealthCheckResult = await Effect.runPromise(
+      manager.healthCheckService("cron-test")
+    );
     expect(health.status).toBe("stopped");
   });
 

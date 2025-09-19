@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server";
+import { Effect } from "effect";
 import {
   BaseService,
   ServiceManager,
@@ -15,42 +16,43 @@ class SimpleService extends BaseService {
     super(name);
   }
 
-  async start(): Promise<void> {
-    console.log(`Starting ${this.name}...`);
+  protected onStart() {
+    return Effect.tryPromise(async () => {
+      console.log(`Starting ${this.name}...`);
 
-    // Simulate initialization
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    this.intervalId = setInterval(() => {
-      console.log(`${this.name} is running...`);
-    }, 5000);
+      this.intervalId = setInterval(() => {
+        console.log(`${this.name} is running...`);
+      }, 5000);
 
-    console.log(`${this.name} started successfully`);
+      console.log(`${this.name} started successfully`);
+    });
   }
 
-  async stop(): Promise<void> {
-    console.log(`Stopping ${this.name}...`);
+  protected onStop() {
+    return Effect.tryPromise(async () => {
+      console.log(`Stopping ${this.name}...`);
 
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
+      if (this.intervalId) {
+        clearInterval(this.intervalId);
+        this.intervalId = null;
+      }
 
-    // Simulate cleanup
-    await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-    console.log(`${this.name} stopped successfully`);
+      console.log(`${this.name} stopped successfully`);
+    });
   }
 
-  async healthCheck(): Promise<HealthCheckResult> {
-    const baseCheck = await super.healthCheck();
-    return {
-      ...baseCheck,
+  protected override onHealthCheck() {
+    return Effect.succeed<HealthCheckResult>({
+      status: "stopped",
       details: {
         memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024,
         uptime: process.uptime(),
       },
-    };
+    });
   }
 }
 
@@ -63,21 +65,24 @@ class CronService extends BaseService {
     this.taskName = taskName;
   }
 
-  async start(): Promise<void> {
-    console.log(
-      `Running cron job ${this.name} - ${this.taskName} at ${new Date().toISOString()}`
-    );
+  protected onStart() {
+    return Effect.tryPromise(async () => {
+      console.log(
+        `Running cron job ${this.name} - ${this.taskName} at ${new Date().toISOString()}`
+      );
 
-    // Simulate work
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    console.log(
-      `Cron job ${this.name} - ${this.taskName} completed at ${new Date().toISOString()}`
-    );
+      console.log(
+        `Cron job ${this.name} - ${this.taskName} completed at ${new Date().toISOString()}`
+      );
+    });
   }
 
-  async stop(): Promise<void> {
-    console.log(`Stopping cron job ${this.name}...`);
+  protected onStop() {
+    return Effect.sync(() => {
+      console.log(`Stopping cron job ${this.name}...`);
+    });
   }
 }
 
@@ -134,12 +139,14 @@ async function runDemo() {
 
   // Start all services
   console.log("Starting all services...");
-  await manager.startAllServices();
+  await Effect.runPromise(manager.startAllServices());
   console.log("All services started!");
 
   // Monitor health
   setInterval(async () => {
-    const healthStatus = await manager.healthCheckAllServices();
+    const healthStatus = await Effect.runPromise(
+      manager.healthCheckAllServices()
+    );
     console.log("Health Status:", JSON.stringify(healthStatus, null, 2));
   }, 10_000);
 
@@ -150,7 +157,7 @@ async function runDemo() {
   // Set up graceful shutdown
   const shutdown = async () => {
     console.log("\nShutting down...");
-    await manager.stopAllServices();
+    await Effect.runPromise(manager.stopAllServices());
     process.exit(0);
   };
 
