@@ -50,6 +50,39 @@
  *
  * @example
  * ```ts
+ * // Using Effect-based services for enhanced reliability
+ * import { Effect } from "j8s";
+ *
+ * class MyEffectService extends Effect.BaseEffectService {
+ *   protected runService(): Effect.Effect<void, Effect.StartupError, Effect.ServiceContext> {
+ *     return Effect.gen(this, function* () {
+ *       yield* Effect.Console.log("Effect service started!");
+ *       yield* Effect.never; // Keep running
+ *     });
+ *   }
+ *
+ *   protected cleanupService(): Effect.Effect<void, Effect.ShutdownError, Effect.ServiceContext> {
+ *     return Effect.Console.log("Effect service stopped!");
+ *   }
+ * }
+ *
+ * const program = Effect.gen(function* () {
+ *   const serviceManager = yield* Effect.EffectServiceManager;
+ *   const service = new MyEffectService("my-effect-service");
+ *   
+ *   yield* serviceManager.addService(service);
+ *   yield* serviceManager.startService("my-effect-service");
+ * });
+ *
+ * Effect.runPromise(
+ *   program.pipe(
+ *     Effect.provide(Effect.EffectServiceManagerLive)
+ *   )
+ * );
+ * ```
+ *
+ * @example
+ * ```ts
  * // Running a service as a cron job
  * import { BaseService, ServiceManager } from "j8s";
  *
@@ -180,3 +213,7 @@ export function createWorkerService(
 
   return new WorkerService(name, fullOptions);
 }
+
+// Effect Integration - Enhanced service orchestration with Effect
+export * as Effect from "./src/effect";
+export { runWithEffectSupport } from "./src/effect/CompatibilityLayer";

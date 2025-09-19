@@ -9,9 +9,7 @@
     "allowJs": true,
     "jsxImportSource": "hono/jsx",
     // Bundler mode
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
+    "moduleResolution": "node",
     "noEmit": true,
 
     // Best practices
