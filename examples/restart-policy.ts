@@ -1,59 +1,59 @@
+import { Duration, Effect } from "effect";
 import { BaseService, ServiceManager, type HealthCheckResult } from "j8s";
 
 // Create a service that runs in the main thread as a long-running task
 class MyService extends BaseService {
   private isStopped = false;
 
-  async start(): Promise<void> {
-    console.log("Service started - iteration count reset");
-    this.isStopped = false;
-
-    // Long-running task that continues until stop() is called
-    // or until it completes naturally or fails
-    await this.runLongRunningTask();
-
-    console.log("Long-running task completed");
+  protected onStart() {
+    return Effect.gen(this, function* () {
+      console.log("Service started - iteration count reset");
+      this.isStopped = false;
+      yield* this.runLongRunningTask();
+      console.log("Long-running task completed");
+    });
   }
 
-  async stop(): Promise<void> {
-    console.log("Service stopping");
-    this.isStopped = true;
+  protected onStop() {
+    return Effect.sync(() => {
+      console.log("Service stopping");
+      this.isStopped = true;
+    });
   }
 
-  async healthCheck(): Promise<HealthCheckResult> {
-    return {
-      status: "running", // This will be overridden by ServiceManager
+  protected override onHealthCheck() {
+    return Effect.succeed<HealthCheckResult>({
+      status: "running",
       details: {
         isRunning: !this.isStopped,
       },
-    };
+    });
   }
 
-  // Simulates a long-running task
-  private async runLongRunningTask(): Promise<void> {
-    let count = 0;
+  private runLongRunningTask(): Effect.Effect<void, unknown> {
+    const self = this;
+    return Effect.gen(function* () {
+      let count = 0;
+      while (!self.isStopped) {
+        yield* Effect.sleep(Duration.seconds(1));
+        count++;
+        console.log(`Running iteration ${count}`);
+        const random = Math.random();
+        console.log(`Random number: ${random}`);
+        if (random < 0.4) {
+          yield* Effect.fail(
+            new Error(`Random failure at iteration ${count}`)
+          );
+        }
 
-    // Run until stopped or until it fails
-    while (!this.isStopped) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      count++;
-      console.log(`Running iteration ${count}`);
-      const random = Math.random();
-      console.log(`Random number: ${random}`);
-      // Randomly fail (for demonstration purposes)
-      if (random < 0.4) {
-        // 40% chance of failure
-        throw new Error(`Random failure at iteration ${count}`);
+        if (count >= 10) {
+          console.log("Task completed successfully after 10 iterations");
+          return;
+        }
       }
 
-      // If we reach 10 iterations, end the task naturally
-      if (count >= 10) {
-        console.log("Task completed successfully after 10 iterations");
-        return;
-      }
-    }
-
-    console.log("Task stopped gracefully");
+      console.log("Task stopped gracefully");
+    });
   }
 }
 
@@ -69,7 +69,7 @@ manager.addService(myService, {
 });
 
 // Start the service
-await manager.startAllServices();
+await Effect.runPromise(manager.startAllServices());
 
 // Keep the process running to observe background failures and restarts
 console.log("Service manager is running. Press Ctrl+C to exit.");

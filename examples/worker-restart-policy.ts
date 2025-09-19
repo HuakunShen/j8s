@@ -1,4 +1,6 @@
+import { Effect } from "effect";
 import { ServiceManager, createWorkerService } from "../index";
+import type { HealthCheckResult } from "../src/interface";
 
 // Set up a more robust error handling for Node.js
 process.on("unhandledRejection", (reason) => {
@@ -25,12 +27,14 @@ manager.addService(workerService, {
 try {
   // Start the service
   console.log("Starting worker service with max retries of 3...");
-  await manager.startService(workerService.name);
+  await Effect.runPromise(manager.startService(workerService.name));
 
   // Watch service status
   const statusInterval = setInterval(async () => {
     try {
-      const health = await manager.healthCheckService(workerService.name);
+      const health: HealthCheckResult = await Effect.runPromise(
+        manager.healthCheckService(workerService.name)
+      );
       console.log(
         `[${new Date().toISOString()}] Service status: ${health.status}, restart count: ${(manager as any).serviceMap.get(workerService.name)?.restartCount || 0}`
       );

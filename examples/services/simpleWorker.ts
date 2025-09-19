@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { expose } from "../../index";
 import type { HealthCheckResult, IService } from "../../src/interface";
 
@@ -12,47 +13,51 @@ class CounterService implements IService {
   private maxCount = 10;
   private interval: NodeJS.Timeout | null = null;
 
-  async start(): Promise<void> {
-    console.log("CounterService started");
-    this.running = true;
-    this.count = 0;
+  start() {
+    return Effect.sync(() => {
+      console.log("CounterService started");
+      this.running = true;
+      this.count = 0;
 
-    // Run a counter task
-    this.interval = setInterval(() => {
-      this.count++;
-      console.log(`Count: ${this.count}`);
+      // Run a counter task
+      this.interval = setInterval(() => {
+        this.count++;
+        console.log(`Count: ${this.count}`);
 
-      // Stop when reached max count
-      if (this.count >= this.maxCount) {
-        this.running = false;
-        if (this.interval) {
-          clearInterval(this.interval);
-          this.interval = null;
+        // Stop when reached max count
+        if (this.count >= this.maxCount) {
+          this.running = false;
+          if (this.interval) {
+            clearInterval(this.interval);
+            this.interval = null;
+          }
+          console.log("CounterService completed task");
         }
-        console.log("CounterService completed task");
+      }, 1000);
+    });
+  }
+
+  stop() {
+    return Effect.sync(() => {
+      console.log("CounterService stopped");
+      this.running = false;
+
+      if (this.interval) {
+        clearInterval(this.interval);
+        this.interval = null;
       }
-    }, 1000);
+    });
   }
 
-  async stop(): Promise<void> {
-    console.log("CounterService stopped");
-    this.running = false;
-
-    if (this.interval) {
-      clearInterval(this.interval);
-      this.interval = null;
-    }
-  }
-
-  async healthCheck(): Promise<HealthCheckResult> {
-    return {
+  healthCheck() {
+    return Effect.succeed<HealthCheckResult>({
       status: this.running ? "running" : "stopped",
       details: {
         currentCount: this.count,
         maxCount: this.maxCount,
         progress: `${this.count}/${this.maxCount}`,
       },
-    };
+    });
   }
 }
 

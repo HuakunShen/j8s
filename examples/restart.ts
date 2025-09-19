@@ -1,7 +1,7 @@
+import { Effect } from "effect";
 import {
   BaseService,
   ServiceManager,
-  createWorkerService,
   type HealthCheckResult,
 } from "../index";
 
@@ -13,37 +13,38 @@ class SimpleService extends BaseService {
     super(name);
   }
 
-  async start(): Promise<void> {
-    console.log(`Starting ${this.name}...`);
+  protected onStart() {
+    return Effect.tryPromise(async () => {
+      console.log(`Starting ${this.name}...`);
 
-    // Simulate initialization
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    throw new Error("Failed to start");
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      throw new Error("Failed to start");
+    });
   }
 
-  async stop(): Promise<void> {
-    console.log(`Stopping ${this.name}...`);
+  protected onStop() {
+    return Effect.tryPromise(async () => {
+      console.log(`Stopping ${this.name}...`);
 
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
+      if (this.intervalId) {
+        clearInterval(this.intervalId);
+        this.intervalId = null;
+      }
 
-    // Simulate cleanup
-    await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-    console.log(`${this.name} stopped successfully`);
+      console.log(`${this.name} stopped successfully`);
+    });
   }
 
-  async healthCheck(): Promise<HealthCheckResult> {
-    // Note: No need to return status, ServiceManager will provide it
-    return {
-      status: "stopped", // This will be overridden by ServiceManager
+  protected override onHealthCheck() {
+    return Effect.succeed<HealthCheckResult>({
+      status: "stopped",
       details: {
         memoryUsage: process.memoryUsage().heapUsed / 1024 / 1024,
         uptime: process.uptime(),
       },
-    };
+    });
   }
 }
 
@@ -63,21 +64,23 @@ async function runDemo() {
   // Start all services
   console.log("Starting all services...");
   try {
-    await manager.startAllServices();
+    await Effect.runPromise(manager.startAllServices());
   } catch (error) {
     console.log("Services failed to start, but ServiceManager is handling it");
   }
 
   // Monitor health
   setInterval(async () => {
-    const healthStatus = await manager.healthCheckAllServices();
+    const healthStatus = await Effect.runPromise(
+      manager.healthCheckAllServices()
+    );
     console.log("Health Status:", JSON.stringify(healthStatus, null, 2));
   }, 5_000);
 
   // Set up graceful shutdown
   const shutdown = async () => {
     console.log("\nShutting down...");
-    await manager.stopAllServices();
+    await Effect.runPromise(manager.stopAllServices());
     process.exit(0);
   };
 

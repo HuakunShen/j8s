@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { ServiceManager, createWorkerService } from "../index";
 
 // Create a worker service with custom data
@@ -29,11 +30,13 @@ manager.addService(workerService, {
 try {
   // Start the service
   console.log("Starting worker service with custom data...");
-  await manager.startService(workerService.name);
+  await Effect.runPromise(manager.startService(workerService.name));
 
   // Check health status after a while to see the custom data in health details
   setTimeout(async () => {
-    const health = await manager.healthCheckService(workerService.name);
+    const health = await Effect.runPromise(
+      manager.healthCheckService(workerService.name)
+    );
     console.log("Health check result:", health);
   }, 2000);
 

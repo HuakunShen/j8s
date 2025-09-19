@@ -1,423 +1,232 @@
-# j8s - JavaScript Service Orchestrator
+# j8s - Effect-first JavaScript Service Orchestrator
 
-https://jsr.io/@hk/j8s
+[j8s](https://jsr.io/@hk/j8s) lets you compose multiple services inside a single
+process and supervise them with the [Effect](https://effect.website) runtime.
+Every lifecycle operation (`start`, `stop`, health checks) is modelled as an
+`Effect`, giving you type-safe error handling, structured concurrency and an easy
+bridge to promises when you need it.
 
-A lightweight service orchestration framework for JavaScript/TypeScript. Run multiple services in a single process using worker threads.
+## Key features
 
-## Features
+- ✅ **Effect-powered lifecycles** – author services with `Effect` and run them
+  through a `ServiceManager`
+- 🔁 **Typed restart policies** – `"always"`, `"unless-stopped"`,
+  `"on-failure"` (with exponential back-off) and `"no"`
+- 🧵 **Worker thread services** – spawn `Worker` based services via RPC
+- ⏰ **Cron scheduling** – trigger services on a cron expression with optional
+  timeouts
+- 📡 **Drop-in REST API** – expose management endpoints (OpenAPI + Scalar UI)
 
-- Run services in main thread or worker threads
-- Health checks for all services
-- Restart policies (always, unless-stopped, on-failure, no)
-- Run services on a schedule (cron jobs)
-- Timeout support for services
-- Communication between worker and main thread using RPC
+## Quick start
 
-## Basic Usage
+```ts
+import { Duration, Effect } from "effect";
+import { ServiceManager, createService } from "j8s";
 
-### Running a service in the main thread
-
-```typescript
-import { BaseService, ServiceManager } from "j8s";
-
-// Create a service that runs in the main thread
-class MyService extends BaseService {
-  async start(): Promise<void> {
-    console.log("Service started");
-    // Service status is managed by ServiceManager
-  }
-
-  async stop(): Promise<void> {
-    console.log("Service stopped");
-    // Service status is managed by ServiceManager
-  }
-
-  async healthCheck(): Promise<HealthCheckResult> {
-    return {
-      status: "running", // This will be overridden by ServiceManager
-      details: {
-        // Add custom health check details
-      },
-    };
-  }
-}
-
-// Create a service manager
-const manager = new ServiceManager();
-
-// Add the service
-const myService = new MyService("my-service");
-manager.addService(myService, {
-  restartPolicy: "always",
+const heartbeat = createService({
+  name: "heartbeat",
+  start: () =>
+    Effect.gen(function* () {
+      while (true) {
+        console.log("💓 heartbeat");
+        yield* Effect.sleep(Duration.seconds(5));
+      }
+    }),
 });
 
-// Start the service
-await manager.startService(myService);
+const manager = new ServiceManager();
+manager.addService(heartbeat, { restartPolicy: "always" });
+
+await Effect.runPromise(manager.startService("heartbeat"));
+// … later
+await Effect.runPromise(manager.stopService("heartbeat"));
 ```
 
-### Running a service in a worker thread
+All manager operations return an `Effect`. Use `Effect.runPromise` (or
+`Effect.runFork`) when calling them from promise-based code.
 
-```typescript
+## Defining services
+
+You can create services either with the functional `createService` helper or by
+extending `BaseService` when you prefer an object-oriented approach.
+
+### `createService`
+
+```ts
+import { Duration, Effect } from "effect";
+import { createService } from "j8s";
+
+const metrics = createService({
+  name: "metrics",
+  start: () =>
+    Effect.gen(function* () {
+      yield* Effect.sleep(Duration.seconds(1));
+      console.log("collecting metrics…");
+      yield* Effect.never; // run until interrupted
+    }),
+  stop: () => Effect.sync(() => console.log("metrics stopped")),
+  healthCheck: () =>
+    Effect.succeed({
+      status: "running",
+      details: { timestamp: Date.now() },
+    }),
+});
+```
+
+### `BaseService`
+
+Override `protected onStart()`, `onStop()` and optionally `onHealthCheck()` with
+`Effect` programs:
+
+```ts
+import { Duration, Effect } from "effect";
+import { BaseService } from "j8s";
+
+class BackupService extends BaseService {
+  constructor() {
+    super("backup");
+  }
+
+  protected onStart() {
+    return Effect.gen(function* () {
+      console.log("Running backup");
+      yield* Effect.sleep(Duration.seconds(2));
+    });
+  }
+
+  protected onStop() {
+    return Effect.sync(() => console.log("Backup stopped"));
+  }
+}
+```
+
+## Restart policies & options
+
+```ts
+const manager = new ServiceManager({ backoffBaseMs: 250, backoffMaxMs: 5_000 });
+manager.addService(job, {
+  restartPolicy: "on-failure",
+  maxRetries: 5,
+});
+```
+
+`ServiceManager` automatically tracks crashes and completions:
+
+| Policy            | Behaviour                                                     |
+| ----------------- | ------------------------------------------------------------- |
+| `"always"`        | Restart immediately after every completion or crash           |
+| `"unless-stopped"` | Restart after completion/crash unless you called `stopService`|
+| `"on-failure"`    | Exponential back-off, up to `maxRetries` crashes              |
+| `"no"`            | Never restart automatically                                   |
+
+Back-off timings can be customised through the manager options shown above.
+
+## Worker services
+
+Wrap worker threads with the built-in RPC helper:
+
+```ts
+import { Effect } from "effect";
 import { ServiceManager, createWorkerService } from "j8s";
 
-// Create a worker service
-const workerService = createWorkerService(
-  "worker-service",
-  new URL("./path/to/worker.ts", import.meta.url),
-  {
-    autoTerminate: false,
-    // Pass custom data to the worker
-    workerData: {
-      config: {
-        maxRetries: 5,
-        timeout: 1000,
-        apiKey: "your-api-key",
-      },
-      initialState: "idle",
-    },
-  }
+const worker = createWorkerService(
+  "thumbnailer",
+  new URL("./worker.ts", import.meta.url),
+  { autoTerminate: false }
 );
 
-// Add the service with restart policy
 const manager = new ServiceManager();
-manager.addService(workerService, {
-  restartPolicy: "on-failure",
-  maxRetries: 3,
-});
-
-// Start the service
-await manager.startService(workerService);
+manager.addService(worker, { restartPolicy: "on-failure", maxRetries: 3 });
+await Effect.runPromise(manager.startService("thumbnailer"));
 ```
 
-### Creating a worker service
+Inside `worker.ts` expose an `IService` implemented with `Effect`:
 
-To create a worker service, you need to implement the `IService` interface in the worker file:
-
-#### Original approach (using kkrpc directly)
-
-```typescript
-// worker.ts
-import { WorkerChildIO, RPCChannel } from "@kunkun/kkrpc";
-import type { IService, HealthCheckResult } from "j8s";
-import { workerData } from "worker_threads";
-
-const io = new WorkerChildIO();
+```ts
+import { Effect } from "effect";
+import { expose, type IService } from "j8s";
 
 class WorkerService implements IService {
-  name = "worker-service";
+  name = "thumbnailer";
   private running = false;
-  // Access the custom data passed from the main thread
-  private config = workerData?.config || {};
-  private state = workerData?.initialState || "idle";
 
-  async start(): Promise<void> {
-    console.log("Worker service started with config:", this.config);
-    console.log("Initial state:", this.state);
-    this.running = true;
-    // Do your initialization here
+  start() {
+    return Effect.sync(() => {
+      this.running = true;
+      console.log("worker online");
+    });
   }
 
-  async stop(): Promise<void> {
-    console.log("Worker service stopped");
-    this.running = false;
-    // Do your cleanup here
+  stop() {
+    return Effect.sync(() => {
+      this.running = false;
+    });
   }
 
-  async healthCheck(): Promise<HealthCheckResult> {
-    return {
-      status: this.running ? "running" : "stopped",
-      details: {
-        // Add custom health check details
-        state: this.state,
-        config: this.config,
-      },
-    };
+  healthCheck() {
+    return Effect.succeed({ status: this.running ? "running" : "stopped" });
   }
 }
 
-// Expose the service via RPC
-const rpc = new RPCChannel(io, {
-  expose: new WorkerService(),
-});
-```
-
-#### Simplified approach (using the expose function)
-
-```typescript
-// worker.ts
-import { expose } from "j8s";
-import { workerData } from "worker_threads";
-import type { IService, HealthCheckResult } from "j8s";
-
-class WorkerService implements IService {
-  name = "worker-service";
-  private running = false;
-  // Access the custom data passed from the main thread
-  private config = workerData?.config || {};
-  private state = workerData?.initialState || "idle";
-
-  async start(): Promise<void> {
-    console.log("Worker service started with config:", this.config);
-    console.log("Initial state:", this.state);
-    this.running = true;
-    // Do your initialization here
-  }
-
-  async stop(): Promise<void> {
-    console.log("Worker service stopped");
-    this.running = false;
-    // Do your cleanup here
-  }
-
-  async healthCheck(): Promise<HealthCheckResult> {
-    return {
-      status: this.running ? "running" : "stopped",
-      details: {
-        // Add custom health check details
-        state: this.state,
-        config: this.config,
-      },
-    };
-  }
-}
-
-// Expose the service - no need for manual RPC setup
 expose(new WorkerService());
 ```
 
-### Running a service as a cron job
+## Cron jobs
 
-```typescript
-import { BaseService, ServiceManager } from "j8s";
+Attach a cron schedule when adding a service. The service is started whenever the
+cron expression fires and optionally stopped after a timeout.
 
-class BackupService extends BaseService {
-  async start(): Promise<void> {
-    console.log("Running backup...");
-    // Do backup logic here
-
-    // Simulate work
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    console.log("Backup completed");
-  }
-
-  async stop(): Promise<void> {
-    // Handle stop if needed
-  }
-
-  async healthCheck(): Promise<HealthCheckResult> {
-    return {
-      status: "running", // This will be overridden by ServiceManager
-      details: {
-        // Add custom health check details
-      },
-    };
-  }
-}
-
-const manager = new ServiceManager();
-const backupService = new BackupService("backup-service");
-
-// Add service with cron job configuration
-manager.addService(backupService, {
+```ts
+manager.addService(reportingService, {
   cronJob: {
-    schedule: "0 0 * * *", // Run at midnight every day
-    timeout: 60000, // 1 minute timeout
+    schedule: "0 */6 * * *", // every six hours
+    timeout: 60_000,
   },
 });
 ```
 
 ## REST API
 
-j8s includes a built-in REST API for managing services using Hono. The API is fully documented with OpenAPI/Swagger specifications and includes request/response validation.
+Use the `createServiceManagerAPI` helper to expose management endpoints powered
+by [Hono](https://hono.dev/):
 
-```typescript
+```ts
 import { serve } from "@hono/node-server";
-import { ServiceManager, createServiceManagerAPI } from "j8s";
+import { Effect } from "effect";
+import { ServiceManager, createService } from "j8s";
+import { createServiceManagerAPI } from "j8s/api";
 
-// Create and configure your service manager
 const manager = new ServiceManager();
-// Add services...
+manager.addService(
+  createService({
+    name: "ping",
+    start: () => Effect.never,
+  })
+);
 
-// Create the REST API with optional OpenAPI/Scalar documentation
 const app = createServiceManagerAPI(manager, {
-  // Optional: Enable OpenAPI documentation
-  openapi: {
-    enabled: true,
-    info: {
-      title: "j8s Service Manager API",
-      version: "1.0.0",
-      description: "API for managing j8s services",
-    },
-    servers: [{ url: "http://localhost:3000", description: "Local Server" }],
-  },
-  // Optional: Enable Scalar API reference UI
-  scalar: {
-    enabled: true,
-    theme: "deepSpace",
-  },
+  openapi: { enabled: true },
+  scalar: { enabled: true },
 });
 
-// Start the HTTP server
-serve({
-  fetch: app.fetch,
-  port: 3000,
-});
-
-console.log("API server running on http://localhost:3000");
+serve({ fetch: app.fetch, port: 3000 });
 ```
 
-### Available Endpoints
+All handlers inside the generated API already bridge through `Effect.runPromise`,
+so you can call them from regular HTTP clients.
 
-- `GET /services` - List all services
-- `GET /services/:name` - Get service details
-- `GET /services/:name/health` - Get health for a specific service
-- `POST /services/:name/start` - Start a service
-- `POST /services/:name/stop` - Stop a service
-- `POST /services/:name/restart` - Restart a service
-- `DELETE /services/:name` - Remove a service
-- `GET /health` - Get health for all services
-- `POST /services/start-all` - Start all services
-- `POST /services/stop-all` - Stop all services
+## Health checks
 
-### Optional Documentation Endpoints
+`ServiceManager.healthCheckService(name)` returns the service's own details but
+always overrides the status with the supervised state (`running`, `stopped`,
+`crashed`, etc.). Combine this with custom data returned by your services to build
+rich observability dashboards.
 
-When enabled, the following endpoints are available:
+## Testing utilities
 
-- `GET /openapi` - OpenAPI/Swagger specification
-  - You can generate a OpenAPI client SDK in any language with this
-- `GET /scalar` - Interactive API documentation UI
+The repository ships with Vitest/Bun tests demonstrating restart behaviour and
+cron scheduling. Run them with `bun test`.
 
-### API Response Types
+---
 
-All API responses are validated and documented. Here are the main response types:
-
-```typescript
-// Service list response
-interface ServicesListResponse {
-  services: Array<{
-    name: string;
-  }>;
-}
-
-// Service details response
-interface ServiceResponse {
-  name: string;
-  status: string;
-  health: {
-    status: string;
-    details?: Record<string, any>;
-  };
-}
-
-// Health check response
-interface HealthCheckResponse {
-  status: string;
-  details?: Record<string, any>;
-}
-
-// Error response
-interface ErrorResponse {
-  error: string;
-}
-
-// Success message response
-interface MessageResponse {
-  message: string;
-}
-```
-
-### API Configuration
-
-The `createServiceManagerAPI` function accepts an optional configuration object:
-
-```typescript
-interface APIConfig {
-  openapi?: {
-    enabled?: boolean;
-    info?: {
-      title?: string;
-      version?: string;
-      description?: string;
-    };
-    servers?: Array<{
-      url: string;
-      description?: string;
-    }>;
-  };
-  scalar?: {
-    enabled?: boolean;
-    theme?:
-      | "default"
-      | "deepSpace"
-      | "alternate"
-      | "moon"
-      | "purple"
-      | "solarized"
-      | "bluePlanet"
-      | "saturn"
-      | "kepler"
-      | "elysiajs"
-      | "fastify"
-      | "mars"
-      | "laserwave"
-      | "none";
-  };
-}
-```
-
-## API Reference
-
-### Interfaces
-
-#### IService
-
-```typescript
-interface IService {
-  name: string;
-  start(): Promise<void>;
-  stop(): Promise<void>;
-  healthCheck(): Promise<HealthCheckResult>;
-}
-```
-
-#### ServiceConfig
-
-```typescript
-interface ServiceConfig {
-  restartPolicy?: RestartPolicy; // 'always' | 'unless-stopped' | 'on-failure' | 'no'
-  maxRetries?: number; // Used with 'on-failure' policy
-  cronJob?: CronJobConfig;
-}
-```
-
-#### CronJobConfig
-
-```typescript
-interface CronJobConfig {
-  schedule: string; // Cron expression
-  timeout?: number; // Optional timeout in milliseconds
-}
-```
-
-### Classes
-
-#### BaseService
-
-A base class for services running in the main thread. Service status is managed by the ServiceManager.
-
-#### ServiceManager
-
-Manages all services, handling starting, stopping, health checks, and restart policies. The ServiceManager is responsible for tracking and managing service status.
-
-#### WorkerService
-
-A wrapper for services running in worker threads.
-
-## Examples
-
-Check out the [examples](./examples) directory for more usage examples.
-
-## License
-
-MIT
+Questions or feedback? Open an issue on the project repo!
