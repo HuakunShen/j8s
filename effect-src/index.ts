@@ -1,10 +1,14 @@
+// Import error classes to use in utilities
+import { ServiceError, ResourceError, RetryLimitExceededError } from "./types";
+
+import type { RetryConfig } from "./types";
+
 // Core types and interfaces
 export type {
   ServiceStatus,
   AnyServiceError,
   HealthCheckResult,
   IEffectService,
-  RetryConfig,
   ServiceConfig,
   CronJobConfig,
   ServiceContext,
@@ -12,42 +16,47 @@ export type {
   TracingService,
   Span,
   ResourceManager,
-  HealthChecker
+  HealthChecker,
 } from "./types";
 
 export {
   DEFAULT_RETRY_CONFIG,
-  ServiceContext
-} from "./types";
-
-// Import error classes to use in utilities
-import { 
   ServiceError,
   ResourceError,
-  RetryLimitExceededError 
-} from "./types";
-
-// Also export them
-export { 
-  ServiceError,
-  ResourceError,
-  RetryLimitExceededError 
+  RetryLimitExceededError,
 } from "./types";
 
 // Retry and scheduling
-export {
-  createRetrySchedule,
-  createRateLimitSchedule,
-  createRetryWithRateLimitSchedule,
-  retryWithConfig,
-  retryExponential
-} from "./retry";
+export { retryWithConfig, retryExponential, retryFixed } from "./retry";
 
 // Logging
-export {
-  ConsoleLoggingService,
-  StructuredLogger
-} from "./logging";
+export { ConsoleLoggingService, StructuredLogger } from "./logging";
+
+// Base service class
+export { EffectBaseService } from "./BaseService";
+
+// Service manager
+export { EffectServiceManager } from "./ServiceManager";
+
+// Testing utilities (simplified)
+export class TestUtils {
+  /**
+   * Create a simple mock service for testing
+   */
+  static createMockService(name: string) {
+    return {
+      name,
+      start: () => Effect.sync(() => console.log(`[${name}] Starting`)),
+      stop: () => Effect.sync(() => console.log(`[${name}] Stopping`)),
+      healthCheck: () =>
+        Effect.sync(() => ({
+          status: "healthy" as const,
+          timestamp: Date.now(),
+          details: { service: name },
+        })),
+    };
+  }
+}
 
 // Error utilities
 export class ServiceErrors {
@@ -76,6 +85,27 @@ export class ServiceErrors {
   }
 }
 
+// Testing utilities (simplified)
+export class TestUtils {
+  /**
+   * Create a simple mock service for testing
+   */
+  static createMockService(name: string) {
+    const { Effect } = require("effect");
+    return {
+      name,
+      start: () => Effect.sync(() => console.log(`[${name}] Starting`)),
+      stop: () => Effect.sync(() => console.log(`[${name}] Stopping`)),
+      healthCheck: () =>
+        Effect.sync(() => ({
+          status: "healthy" as const,
+          timestamp: Date.now(),
+          details: { service: name },
+        })),
+    };
+  }
+}
+
 // Configuration utilities
 export class ConfigUtils {
   static mergeRetryConfig(
@@ -85,10 +115,9 @@ export class ConfigUtils {
     return {
       ...base,
       ...override,
-      rateLimit: {
-        ...base.rateLimit,
-        ...override.rateLimit
-      }
+      rateLimit: override.rateLimit
+        ? { ...base.rateLimit, ...override.rateLimit }
+        : base.rateLimit,
     };
   }
 
