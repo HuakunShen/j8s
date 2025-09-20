@@ -180,3 +180,6 @@ export function createWorkerService(
 
   return new WorkerService(name, fullOptions);
 }
+
+// Export Effect.js integration
+export * from "./src/effect";
