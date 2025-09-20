@@ -17,10 +17,15 @@ export type {
   Span,
   ResourceManager,
   HealthChecker,
+  ServiceInstance,
+  ServiceDiscovery,
+  LoadBalancer,
+  LoadBalanceStrategy,
 } from "./types";
 
 export {
   DEFAULT_RETRY_CONFIG,
+  ServiceContext,
   ServiceError,
   ResourceError,
   RetryLimitExceededError,
@@ -38,25 +43,13 @@ export { EffectBaseService } from "./BaseService";
 // Service manager
 export { EffectServiceManager } from "./ServiceManager";
 
-// Testing utilities (simplified)
-export class TestUtils {
-  /**
-   * Create a simple mock service for testing
-   */
-  static createMockService(name: string) {
-    return {
-      name,
-      start: () => Effect.sync(() => console.log(`[${name}] Starting`)),
-      stop: () => Effect.sync(() => console.log(`[${name}] Stopping`)),
-      healthCheck: () =>
-        Effect.sync(() => ({
-          status: "healthy" as const,
-          timestamp: Date.now(),
-          details: { service: name },
-        })),
-    };
-  }
-}
+// Service discovery and load balancing
+export {
+  InMemoryServiceDiscovery,
+  EffectLoadBalancer,
+  ServiceRegistry,
+  ServiceInstanceFactory,
+} from "./discovery";
 
 // Error utilities
 export class ServiceErrors {
@@ -82,27 +75,6 @@ export class ServiceErrors {
     attempt: number
   ): RetryLimitExceededError {
     return new RetryLimitExceededError(message, serviceName, attempt);
-  }
-}
-
-// Testing utilities (simplified)
-export class TestUtils {
-  /**
-   * Create a simple mock service for testing
-   */
-  static createMockService(name: string) {
-    const { Effect } = require("effect");
-    return {
-      name,
-      start: () => Effect.sync(() => console.log(`[${name}] Starting`)),
-      stop: () => Effect.sync(() => console.log(`[${name}] Stopping`)),
-      healthCheck: () =>
-        Effect.sync(() => ({
-          status: "healthy" as const,
-          timestamp: Date.now(),
-          details: { service: name },
-        })),
-    };
   }
 }
 

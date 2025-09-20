@@ -1,7 +1,14 @@
 import { Effect, Schedule, Context, Option, Exit } from "effect";
 
 // Service status types
-export type ServiceStatus = "stopped" | "running" | "stopping" | "crashed" | "unhealthy" | "healthy" | "degraded";
+export type ServiceStatus =
+  | "stopped"
+  | "running"
+  | "stopping"
+  | "crashed"
+  | "unhealthy"
+  | "healthy"
+  | "degraded";
 
 // Error types
 export class ServiceError {
@@ -32,7 +39,10 @@ export class RetryLimitExceededError {
 }
 
 // Union type for all service errors
-export type AnyServiceError = ServiceError | ResourceError | RetryLimitExceededError;
+export type AnyServiceError =
+  | ServiceError
+  | ResourceError
+  | RetryLimitExceededError;
 
 // Health check result
 export interface HealthCheckResult {
@@ -71,8 +81,8 @@ export const DEFAULT_RETRY_CONFIG: Required<RetryConfig> = {
   jitter: true,
   rateLimit: {
     maxAttempts: 10,
-    window: 60000 // 1 minute
-  }
+    window: 60000, // 1 minute
+  },
 };
 
 // Service configuration
@@ -100,17 +110,33 @@ export interface ServiceContext {
 
 // Logging service interface
 export interface LoggingService {
-  info: (message: string, metadata?: Record<string, unknown>) => Effect.Effect<void>;
-  warn: (message: string, metadata?: Record<string, unknown>) => Effect.Effect<void>;
-  error: (message: string, error?: unknown, metadata?: Record<string, unknown>) => Effect.Effect<void>;
-  debug: (message: string, metadata?: Record<string, unknown>) => Effect.Effect<void>;
+  info: (
+    message: string,
+    metadata?: Record<string, unknown>
+  ) => Effect.Effect<void>;
+  warn: (
+    message: string,
+    metadata?: Record<string, unknown>
+  ) => Effect.Effect<void>;
+  error: (
+    message: string,
+    error?: unknown,
+    metadata?: Record<string, unknown>
+  ) => Effect.Effect<void>;
+  debug: (
+    message: string,
+    metadata?: Record<string, unknown>
+  ) => Effect.Effect<void>;
 }
 
 // Tracing service interface
 export interface TracingService {
   startSpan: (name: string) => Effect.Effect<Span>;
   currentSpan: () => Effect.Effect<Option.Option<Span>>;
-  addEvent: (name: string, attributes?: Record<string, unknown>) => Effect.Effect<void>;
+  addEvent: (
+    name: string,
+    attributes?: Record<string, unknown>
+  ) => Effect.Effect<void>;
 }
 
 // Span interface (simplified)
@@ -124,15 +150,66 @@ export interface ResourceManager {
   acquire<T>(
     name: string,
     acquire: Effect.Effect<T, ResourceError>,
-    release: (resource: T, exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void, ResourceError>
+    release: (
+      resource: T,
+      exit: Exit.Exit<unknown, unknown>
+    ) => Effect.Effect<void, ResourceError>
   ): Effect.Effect<T, ResourceError>;
   releaseAll: () => Effect.Effect<void, ResourceError>;
 }
 
 // Health check interface
 export interface HealthChecker {
-  check: (service: IEffectService) => Effect.Effect<HealthCheckResult, AnyServiceError>;
+  check: (
+    service: IEffectService
+  ) => Effect.Effect<HealthCheckResult, AnyServiceError>;
+}
+
+// Service instance for load balancing
+export interface ServiceInstance {
+  id: string;
+  serviceName: string;
+  address: string; // Could be URL, worker ID, etc.
+  health: HealthCheckResult;
+  lastHealthCheck: number;
+  weight: number; // For weighted load balancing
+  metadata?: Record<string, unknown>;
+}
+
+// Load balancing strategies
+export type LoadBalanceStrategy =
+  | "round-robin"
+  | "random"
+  | "weighted"
+  | "least-connections"
+  | "health-based";
+
+// Service discovery interface
+export interface ServiceDiscovery {
+  register(instance: ServiceInstance): Effect.Effect<void, AnyServiceError>;
+  deregister(instanceId: string): Effect.Effect<void, AnyServiceError>;
+  discover(
+    serviceName: string
+  ): Effect.Effect<ServiceInstance[], AnyServiceError>;
+  getHealthyInstances(
+    serviceName: string
+  ): Effect.Effect<ServiceInstance[], AnyServiceError>;
+}
+
+// Load balancer interface
+export interface LoadBalancer {
+  selectInstance(
+    serviceName: string
+  ): Effect.Effect<ServiceInstance, AnyServiceError>;
+  updateInstanceHealth(
+    instanceId: string,
+    health: HealthCheckResult
+  ): Effect.Effect<void, AnyServiceError>;
+  getInstances(
+    serviceName: string
+  ): Effect.Effect<ServiceInstance[], AnyServiceError>;
 }
 
 // Service context tag for Effect dependency injection
-export const ServiceContext = Context.GenericTag<ServiceContext>("ServiceContext");
+export const ServiceContext =
+  Context.GenericTag<ServiceContext>("ServiceContext");
