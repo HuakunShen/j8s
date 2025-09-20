@@ -11,7 +11,6 @@ export type {
   IEffectService,
   ServiceConfig,
   CronJobConfig,
-  ServiceContext,
   LoggingService,
   TracingService,
   Span,
