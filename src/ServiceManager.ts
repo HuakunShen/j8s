@@ -7,15 +7,17 @@ import type {
   ServiceStatus,
 } from "./interface";
 import { CronJob } from "cron";
+import { Effect, Schedule, Duration, Ref, Fiber, Console } from "effect";
 
 interface ServiceEntry {
   service: IService;
   config: ServiceConfig;
-  restartCount: number;
+  restartCount: Ref.Ref<number>;
   restartTimer?: NodeJS.Timeout;
   cronJob?: CronJob;
-  status: ServiceStatus;
+  status: Ref.Ref<ServiceStatus>;
   runningPromise?: Promise<void>;
+  runningFiber?: Fiber.Fiber<void, unknown>;
 }
 
 export class ServiceManager implements IServiceManager {
@@ -30,11 +32,12 @@ export class ServiceManager implements IServiceManager {
       throw new Error(`Service with name '${service.name}' already exists`);
     }
 
+    // Use Effect's Ref for thread-safe state management
     const serviceEntry: ServiceEntry = {
       service,
       config,
-      restartCount: 0,
-      status: "stopped",
+      restartCount: Effect.runSync(Ref.make(0)),
+      status: Effect.runSync(Ref.make("stopped" as ServiceStatus)),
     };
 
     this.serviceMap.set(service.name, serviceEntry);
@@ -88,52 +91,71 @@ export class ServiceManager implements IServiceManager {
       entry.restartTimer = undefined;
     }
 
-    // Initialize start
-    entry.status = "running";
+    // Use Effect internally for better reliability and resource safety
+    const startServiceEffect = Effect.gen(function* () {
+      // Set status to running using Effect's Ref
+      yield* Ref.set(entry.status, "running");
+      
+      // Convert Promise-based service.start() to Effect
+      yield* Effect.tryPromise({
+        try: () => entry.service.start(),
+        catch: (error) => error
+      });
 
-    try {
-      // For long-running services, don't await the start method
-      // Instead, start it asynchronously and handle errors
-      const startPromise = entry.service.start();
-
-      // Store the promise for potential cleanup
-      entry.runningPromise = startPromise;
-
-      // Handle the promise asynchronously
-      startPromise
-        .then(() => {
-          // Service completed successfully
-          if (entry.status === "running") {
-            entry.status = "stopped";
-            console.log(`Service '${serviceName}' completed successfully`);
-            entry.restartCount = 0;
+      // Reset restart count on successful start
+      yield* Ref.set(entry.restartCount, 0);
+      
+    }).pipe(
+      // Add Effect's built-in resource safety
+      Effect.ensuring(
+        Effect.sync(() => {
+          console.log(`Service '${serviceName}' startup effect completed`);
+        })
+      ),
+      // Handle errors with Effect's structured error handling
+      Effect.tapError((error) =>
+        Effect.gen(function* () {
+          yield* Ref.set(entry.status, "crashed");
+          yield* Console.error(`Service '${serviceName}' failed:`, error);
+          
+          // Handle restart based on policy using Effect
+          if (entry.config.restartPolicy !== "no") {
+            // Use arrow function to preserve this context
+            const restartPromise = () => this.scheduleServiceRestart(entry);
+            yield* Effect.fork(Effect.promise(restartPromise));
           }
         })
-        .catch((error) => {
-          // Service failed
-          console.error(`Service '${serviceName}' failed:`, error);
-          entry.status = "crashed";
-
-          // Handle restart based on policy
-          if (entry.config.restartPolicy !== "no") {
-            this.scheduleServiceRestart(entry);
+      ),
+      // Success handling
+      Effect.tap(() =>
+        Effect.gen(function* () {
+          const currentStatus = yield* Ref.get(entry.status);
+          if (currentStatus === "running") {
+            yield* Ref.set(entry.status, "stopped");
+            yield* Console.log(`Service '${serviceName}' completed successfully`);
           }
-        });
+        })
+      )
+    );
+
+    try {
+      // Fork the Effect to run in background with resource safety
+      const fiber = Effect.runFork(startServiceEffect);
+      entry.runningFiber = fiber;
 
       // Wait a short time to catch immediate startup errors
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Check if the service is still running (not crashed)
-      if (entry.status !== "running") {
+      const currentStatus = Effect.runSync(Ref.get(entry.status));
+      if (currentStatus !== "running") {
         throw new Error(`Service '${serviceName}' failed to start`);
       }
 
-      // Reset restart count on successful start
-      entry.restartCount = 0;
     } catch (error) {
       // Service failed immediately
       console.error(`Service '${serviceName}' failed:`, error);
-      entry.status = "crashed";
+      Effect.runSync(Ref.set(entry.status, "crashed"));
 
       // Handle restart based on policy
       if (entry.config.restartPolicy !== "no") {
@@ -161,22 +183,39 @@ export class ServiceManager implements IServiceManager {
       entry.cronJob.stop();
     }
 
-    entry.status = "stopping";
+    // Interrupt any running Effect fiber for better resource cleanup
+    if (entry.runningFiber) {
+      Effect.runFork(Fiber.interrupt(entry.runningFiber));
+    }
+
+    // Use Effect internally for better timeout handling and resource safety
+    const stopServiceEffect = Effect.gen(function* () {
+      yield* Ref.set(entry.status, "stopping");
+      
+      // Convert Promise-based service.stop() to Effect with timeout
+      yield* Effect.tryPromise({
+        try: () => entry.service.stop(),
+        catch: (error) => error
+      }).pipe(
+        Effect.timeout(Duration.seconds(10)) // Built-in timeout with Effect
+      );
+
+      yield* Ref.set(entry.status, "stopped");
+      yield* Ref.set(entry.restartCount, 0); // Reset restart count
+      
+    }).pipe(
+      Effect.tapError((error) =>
+        Effect.gen(function* () {
+          yield* Console.error(`Error stopping service '${serviceName}':`, error);
+          yield* Ref.set(entry.status, "crashed");
+        })
+      )
+    );
 
     try {
-      // Add timeout for stop operation to prevent hanging
-      await Promise.race([
-        entry.service.stop(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Service stop timeout")), 10000)
-        ),
-      ]);
-      entry.status = "stopped";
-      // Reset restart count when manually stopping service
-      entry.restartCount = 0;
+      // Run the Effect and convert back to Promise for API compatibility
+      await Effect.runPromise(stopServiceEffect);
     } catch (error) {
-      console.error(`Error stopping service '${serviceName}':`, error);
-      entry.status = "crashed";
       throw error; // Re-throw to allow caller to handle
     }
   }
@@ -194,51 +233,103 @@ export class ServiceManager implements IServiceManager {
       throw new Error(`Service '${serviceName}' not found`);
     }
 
-    const serviceHealth = await entry.service.healthCheck();
+    // Use Effect internally for better error handling and timeout
+    const healthCheckEffect = Effect.gen(function* () {
+      const serviceHealth = yield* Effect.tryPromise({
+        try: () => entry.service.healthCheck(),
+        catch: (error) => ({
+          status: "unhealthy" as const,
+          details: { error: String(error) },
+        })
+      }).pipe(
+        Effect.timeout(Duration.seconds(5)) // Prevent hanging health checks
+      );
 
-    // Override the status with our managed status
-    return {
-      ...serviceHealth,
-      status: entry.status, // Use our managed status, not the service's
-    };
+      const currentStatus = yield* Ref.get(entry.status);
+      
+      // Override the status with our managed status
+      return {
+        ...serviceHealth,
+        status: currentStatus, // Use our managed status, not the service's
+      };
+    }).pipe(
+      Effect.catchAll(() =>
+        Effect.gen(function* () {
+          const currentStatus = yield* Ref.get(entry.status);
+          return {
+            status: currentStatus,
+            details: { error: "Health check failed" },
+          };
+        })
+      )
+    );
+
+    return await Effect.runPromise(healthCheckEffect);
   }
 
   public async startAllServices(): Promise<void> {
-    const startPromises = Array.from(this.serviceMap.values()).map((entry) =>
-      this.startService(entry.service.name)
+    // Use Effect for better concurrency control and error handling
+    const serviceNames = Array.from(this.serviceMap.keys());
+    
+    const startAllEffect = Effect.forEach(
+      serviceNames,
+      (serviceName) => Effect.tryPromise({
+        try: () => this.startService(serviceName),
+        catch: (error) => {
+          console.error(`Failed to start service '${serviceName}':`, error);
+          return error;
+        }
+      }),
+      { concurrency: "unbounded" } // Allow concurrent starts
     );
 
-    await Promise.all(startPromises);
+    await Effect.runPromise(startAllEffect);
   }
 
   public async stopAllServices(): Promise<void> {
-    const services = Array.from(this.serviceMap.values());
-    const stopResults = await Promise.allSettled(
-      services.map((entry) => this.stopService(entry.service.name))
+    // Use Effect for better error handling and resource safety
+    const serviceNames = Array.from(this.serviceMap.keys());
+    
+    const stopAllEffect = Effect.forEach(
+      serviceNames,
+      (serviceName) => Effect.tryPromise({
+        try: () => this.stopService(serviceName),
+        catch: (error) => {
+          console.error(`Failed to stop service '${serviceName}':`, error);
+          return error;
+        }
+      }).pipe(
+        Effect.catchAll(() => Effect.void) // Continue even if stop fails
+      ),
+      { concurrency: "unbounded" } // Allow concurrent stops
     );
 
-    stopResults.forEach((result, idx) => {
-      if (result.status === "rejected") {
-        const serviceName = services[idx]?.service.name;
-        console.error(
-          `Failed to stop service '${serviceName}':`,
-          result.reason
-        );
-      }
-    });
+    await Effect.runPromise(stopAllEffect);
   }
 
   public async healthCheckAllServices(): Promise<
     Record<string, HealthCheckResult>
   > {
-    const results: Record<string, HealthCheckResult> = {};
+    // Use Effect for better concurrency and error handling
+    const serviceNames = Array.from(this.serviceMap.keys());
+    
+    const healthCheckAllEffect = Effect.forEach(
+      serviceNames,
+      (serviceName) => Effect.tryPromise({
+        try: () => this.healthCheckService(serviceName),
+        catch: (error) => ({
+          status: "unhealthy" as const,
+          details: { error: String(error) },
+        })
+      }).pipe(
+        Effect.map((health) => [serviceName, health] as const)
+      ),
+      { concurrency: "unbounded" }
+    ).pipe(
+      Effect.map((results) => Object.fromEntries(results))
+    );
 
-    for (const [name, entry] of this.serviceMap.entries()) {
-      // Call healthCheckService for each service
-      results[name] = await this.healthCheckService(name);
-    }
-
-    return results;
+    return await Effect.runPromise(healthCheckAllEffect);
   }
 
   private async scheduleServiceRestart(entry: ServiceEntry): Promise<void> {
@@ -246,43 +337,60 @@ export class ServiceManager implements IServiceManager {
     const policy = config.restartPolicy || "on-failure";
     const maxRetries = config.maxRetries || 3;
 
-    // For 'on-failure', check if we've exceeded maxRetries
-    if (policy === "on-failure" && entry.restartCount >= maxRetries) {
-      console.error(
-        `Service '${service.name}' exceeded max restart attempts (${maxRetries})`
+    // Use Effect's built-in retry scheduling instead of manual exponential backoff
+    const restartServiceEffect = Effect.gen(function* () {
+      const currentRestartCount = yield* Ref.get(entry.restartCount);
+      
+      // For 'on-failure', check if we've exceeded maxRetries
+      if (policy === "on-failure" && currentRestartCount >= maxRetries) {
+        yield* Console.error(
+          `Service '${service.name}' exceeded max restart attempts (${maxRetries})`
+        );
+        return;
+      }
+
+      yield* Console.log(
+        `Scheduling restart for service '${service.name}' (attempt ${currentRestartCount + 1})`
       );
-      return;
-    }
 
-    // Schedule restart with exponential backoff
-    const baseDelay = 1000; // 1 second
-    const maxDelay = 30000; // 30 seconds
-    const delay = Math.min(
-      baseDelay * Math.pow(2, entry.restartCount),
-      maxDelay
+      // Increment restart count
+      yield* Ref.update(entry.restartCount, count => count + 1);
+
+      // Use Effect's built-in exponential backoff with jittering
+      const restartEffect = Effect.tryPromise({
+        try: () => this.startService(service.name),
+        catch: (error) => error
+      });
+
+      // Apply different retry schedules based on restart policy
+      const schedule = policy === "always" 
+        ? Schedule.exponential(Duration.seconds(1)).pipe(
+            Schedule.compose(Schedule.upTo(Duration.seconds(30))),
+            Schedule.jittered() // Built-in jittering to prevent thundering herd
+          )
+        : Schedule.exponential(Duration.seconds(1)).pipe(
+            Schedule.compose(Schedule.recurs(maxRetries - currentRestartCount)),
+            Schedule.compose(Schedule.upTo(Duration.seconds(30))),
+            Schedule.jittered()
+          );
+
+      yield* restartEffect.pipe(
+        Effect.retry(schedule),
+        Effect.catchAll((error) =>
+          Console.error(`Failed to restart service '${service.name}':`, error)
+        )
+      );
+
+    }).pipe(
+      Effect.delay(Duration.seconds(1)) // Initial delay before restart
     );
 
-    console.log(
-      `Scheduling restart for service '${service.name}' in ${delay}ms (attempt ${entry.restartCount + 1})`
-    );
-
-    // Clear any existing restart timer
-    if (entry.restartTimer) {
-      clearTimeout(entry.restartTimer);
+    // Convert Effect back to Promise for API compatibility
+    try {
+      await Effect.runPromise(restartServiceEffect);
+    } catch (error) {
+      console.error(`Restart scheduling failed for '${service.name}':`, error);
     }
-
-    // Use promise to handle the timeout properly
-    await new Promise<void>((resolve) => {
-      entry.restartTimer = setTimeout(() => {
-        entry.restartCount++;
-        entry.restartTimer = undefined;
-        resolve();
-      }, delay);
-    });
-
-    // Directly restart the service after the timer expires
-    console.log(`Actually restarting service '${service.name}' now...`);
-    await this.startService(service.name);
   }
 
   private async handleServiceFailure(
@@ -290,15 +398,21 @@ export class ServiceManager implements IServiceManager {
     error: unknown
   ): Promise<void> {
     const { service } = entry;
-    console.error(`Service '${service.name}' failed: ${error}`);
+    
+    // Use Effect for better error handling and state management
+    const handleFailureEffect = Effect.gen(function* () {
+      yield* Console.error(`Service '${service.name}' failed:`, error);
+      yield* Ref.set(entry.status, "crashed");
 
-    // Update service status
-    entry.status = "crashed";
+      // Don't restart if policy is 'no'
+      if (entry.config.restartPolicy !== "no") {
+        // Use arrow function to preserve this context
+        const restartPromise = () => this.scheduleServiceRestart(entry);
+        yield* Effect.fork(Effect.promise(restartPromise));
+      }
+    });
 
-    // Don't restart if policy is 'no'
-    if (entry.config.restartPolicy !== "no") {
-      await this.scheduleServiceRestart(entry);
-    }
+    await Effect.runPromise(handleFailureEffect);
   }
 
   private setupCronJob(entry: ServiceEntry): void {
@@ -312,53 +426,64 @@ export class ServiceManager implements IServiceManager {
       entry.cronJob.stop();
     }
 
-    // Create a new cron job using the cron package
+    // Create a new cron job using the cron package (maintaining backward compatibility)
+    // But use Effect internally for better error handling and resource safety
     entry.cronJob = new CronJob(
       schedule,
       async () => {
-        try {
-          // Set status to running directly
-          entry.status = "running";
+        // Use Effect internally for better error handling and resource management
+        const cronJobEffect = Effect.gen(function* () {
+          yield* Ref.set(entry.status, "running");
+          yield* Console.log(`Running cron job for service '${service.name}'`);
 
-          // Create the promise for the long-running service
-          entry.runningPromise = service
-            .start()
-            .then(() => {
-              // Service completed successfully
-              if (entry.status === "running") {
-                entry.status = "stopped";
-                console.log(`Service '${service.name}' completed successfully`);
-              }
-            })
-            .catch((error) => {
-              // Service failed
-              if (entry.status === "running") {
-                this.handleServiceFailure(entry, error);
-              }
-            });
-
-          // If a timeout is specified, ensure the service stops
-          if (entry.config.cronJob?.timeout) {
-            setTimeout(async () => {
-              try {
-                if (entry.status === "running") {
-                  entry.status = "stopping";
-                  await service.stop();
-                  entry.status = "stopped";
-                }
-              } catch (error) {
-                console.error(
-                  `Error stopping service '${service.name}' after timeout: ${error}`
-                );
-                entry.status = "crashed";
-              }
-            }, entry.config.cronJob.timeout);
-          }
-        } catch (error) {
-          console.error(
-            `Error running cron job for service '${service.name}': ${error}`
+          // Convert service.start() to Effect with timeout support
+          const serviceStartEffect = Effect.tryPromise({
+            try: () => service.start(),
+            catch: (error) => error
+          }).pipe(
+            entry.config.cronJob?.timeout 
+              ? Effect.timeout(Duration.millis(entry.config.cronJob.timeout))
+              : Effect.identity
           );
-          entry.status = "crashed";
+
+          yield* serviceStartEffect.pipe(
+            Effect.tapBoth({
+              onFailure: (error) => Effect.gen(function* () {
+                yield* Ref.set(entry.status, "crashed");
+                // Use arrow function to preserve this context
+                const handleFailure = () => this.handleServiceFailure(entry, error);
+                yield* Effect.promise(handleFailure);
+              }),
+              onSuccess: () => Effect.gen(function* () {
+                const currentStatus = yield* Ref.get(entry.status);
+                if (currentStatus === "running") {
+                  yield* Ref.set(entry.status, "stopped");
+                  yield* Console.log(`Service '${service.name}' completed successfully`);
+                }
+              })
+            }),
+            // Add Effect's resource safety
+            Effect.ensuring(
+              Effect.sync(() => {
+                console.log(`Cron job effect cleanup for '${service.name}'`);
+              })
+            )
+          );
+
+        }).pipe(
+          Effect.catchAll((error) =>
+            Effect.gen(function* () {
+              yield* Console.error(`Error running cron job for service '${service.name}':`, error);
+              yield* Ref.set(entry.status, "crashed");
+            })
+          )
+        );
+
+        // Run the Effect (convert back to Promise for cron compatibility)
+        try {
+          await Effect.runPromise(cronJobEffect);
+        } catch (error) {
+          console.error(`Cron job failed for '${service.name}':`, error);
         }
       },
       null, // onComplete

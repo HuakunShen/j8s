@@ -1,0 +1,23 @@
+{
+  "name": "j8s-effect-demo",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "demo": "bun run simple-demo.ts",
+    "demo:service": "bun run service-demo.ts", 
+    "demo:all": "./run-all.sh",
+    "demo:basic": "bun run basic-demo.ts",
+    "demo:worker": "bun run worker-demo.ts",
+    "demo:quick": "bun run run-demo.ts",
+    "dev": "bun --watch simple-demo.ts"
+  },
+  "dependencies": {
+    "@effect/experimental": "^0.29.0",
+    "@effect/platform-node": "^0.68.0",
+    "effect": "^3.17.13",
+    "tsx": "^4.19.2",
+    "concurrently": "^9.1.0"
+  },
+  "description": "Demo applications for Effect-based j8s service orchestrator"
+}
