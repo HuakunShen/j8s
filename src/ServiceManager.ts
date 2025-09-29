@@ -6,7 +6,6 @@ import type {
   RestartPolicy,
   ServiceStatus,
   ScheduledJobConfig,
-  CronJobConfig,
 } from "./interface";
 import { Effect, Schedule, Duration, Fiber } from "effect";
 import { IServiceAdapter } from "./IServiceAdapter";
@@ -47,22 +46,8 @@ export class ServiceManager implements IServiceManager {
 
     this.managedServices.set(service.name, managedService);
 
-    // Handle backward compatibility for cronJob
-    if (config.cronJob && !config.scheduledJob) {
-      console.warn(
-        `cronJob configuration for service "${service.name}" is deprecated. Please use scheduledJob instead.`
-      );
-      // Convert cronJob to scheduledJob format
-      const { schedule: cronExpression, timeout } = config.cronJob;
-      const cronSchedule = Schedule.cron(cronExpression);
-      managedService.config.scheduledJob = {
-        schedule: cronSchedule,
-        timeout: timeout ? Duration.millis(timeout) : undefined,
-      };
-    }
-
     // Set up scheduled job if configured
-    if (config.scheduledJob || managedService.config.scheduledJob) {
+    if (config.scheduledJob) {
       this.setupScheduledJob(managedService);
     }
   }

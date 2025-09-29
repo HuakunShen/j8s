@@ -30,13 +30,6 @@ export interface ServiceConfig {
   restartPolicy?: RestartPolicy;
   maxRetries?: number; // used with on-failure policy
   scheduledJob?: ScheduledJobConfig;
-  cronJob?: CronJobConfig; // Backward compatibility - deprecated, use scheduledJob instead
-}
-
-// Backward compatibility - deprecated, use ScheduledJobConfig instead
-export interface CronJobConfig {
-  schedule: string; // cron expression - deprecated
-  timeout?: number; // optional timeout in milliseconds - deprecated
 }
 
 export interface IServiceManager {

@@ -202,10 +202,10 @@ class WorkerService implements IService {
 expose(new WorkerService());
 ```
 
-### Running a service as a cron job
+### Running a service on a schedule
 
 ```typescript
-import { BaseService, ServiceManager } from "j8s";
+import { BaseService, ServiceManager, Schedule, Duration } from "effect";
 
 class BackupService extends BaseService {
   async start(): Promise<void> {
@@ -235,11 +235,11 @@ class BackupService extends BaseService {
 const manager = new ServiceManager();
 const backupService = new BackupService("backup-service");
 
-// Add service with cron job configuration
+// Add service with scheduled job configuration
 manager.addService(backupService, {
-  cronJob: {
-    schedule: "0 0 * * *", // Run at midnight every day
-    timeout: 60000, // 1 minute timeout
+  scheduledJob: {
+    schedule: Schedule.cron("0 0 * * *"), // Run at midnight every day
+    timeout: Duration.seconds(60), // 1 minute timeout
   },
 });
 ```
@@ -404,16 +404,16 @@ interface IService {
 interface ServiceConfig {
   restartPolicy?: RestartPolicy; // 'always' | 'unless-stopped' | 'on-failure' | 'no'
   maxRetries?: number; // Used with 'on-failure' policy
-  cronJob?: CronJobConfig;
+  scheduledJob?: ScheduledJobConfig;
 }
 ```
 
-#### CronJobConfig
+#### ScheduledJobConfig
 
 ```typescript
-interface CronJobConfig {
-  schedule: string; // Cron expression
-  timeout?: number; // Optional timeout in milliseconds
+interface ScheduledJobConfig {
+  schedule: Schedule.Schedule<unknown, unknown, never>; // Effect Schedule
+  timeout?: Duration.Duration; // Optional timeout duration
 }
 ```
 

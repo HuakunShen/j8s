@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { ServiceManager, BaseService, type HealthCheckResult } from "..";
 import { createServiceManagerAPI } from "../api";
+import { Schedule, Duration } from "effect";
 
 // Create a demo service by extending BaseService
 class DemoService extends BaseService {
@@ -85,12 +86,12 @@ serviceManager.addService(serviceB, {
   maxRetries: 3,
 });
 
-// Cron job service
+// Scheduled job service
 const backupService = new DemoService("backup-service");
 serviceManager.addService(backupService, {
-  cronJob: {
-    schedule: "*/15 * * * * *", // Every 15 seconds
-    timeout: 10000, // 10 second timeout
+  scheduledJob: {
+    schedule: Schedule.spaced(Duration.seconds(15)), // Every 15 seconds
+    timeout: Duration.seconds(10), // 10 second timeout
   },
 });
 

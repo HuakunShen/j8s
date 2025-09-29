@@ -50,8 +50,8 @@
  *
  * @example
  * ```ts
- * // Running a service as a cron job
- * import { BaseService, ServiceManager } from "j8s";
+ * // Running a service on a schedule
+ * import { BaseService, ServiceManager, Schedule, Duration } from "effect";
  *
  * class BackupService extends BaseService {
  *   async start(): Promise<void> {
@@ -70,9 +70,9 @@
  * const backupService = new BackupService("backup-service");
  *
  * manager.addService(backupService, {
- *   cronJob: {
- *     schedule: "0 0 * * *", // Run at midnight every day
- *     timeout: 60000, // 1 minute timeout
+ *   scheduledJob: {
+ *     schedule: Schedule.cron("0 0 * * *"), // Run at midnight every day
+ *     timeout: Duration.seconds(60), // 1 minute timeout
  *   },
  * });
  * ```
@@ -121,7 +121,6 @@ export type {
   RestartPolicy,
   HealthCheckResult,
   IService,
-  CronJobConfig,
   ScheduledJobConfig,
   ServiceConfig,
   IServiceManager,
