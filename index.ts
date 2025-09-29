@@ -122,6 +122,7 @@ export type {
   HealthCheckResult,
   IService,
   CronJobConfig,
+  ScheduledJobConfig,
   ServiceConfig,
   IServiceManager,
 } from "./src/interface";
@@ -152,6 +153,30 @@ export type { WorkerServiceOptions } from "./src/WorkerService";
  * implementation through RPC to the main thread.
  */
 export { expose } from "./src/expose";
+
+// Enhanced Effect integration exports
+export { EnhancedServiceAdapter } from "./src/EnhancedServiceAdapter";
+
+/**
+ * Effect-based service interface and base class
+ */
+export type { IEffectService } from "./src/IEffectService";
+export { BaseEffectService, DatabaseEffectService } from "./src/IEffectService";
+
+/**
+ * Error handling utilities
+ */
+export { ServiceErrorType, StructuredServiceError, ServiceErrorHandling } from "./src/errors";
+
+/**
+ * Effect utilities for retry policies, resource management, concurrency control, and monitoring
+ */
+export { RetryPolicies, ResourceManager, Concurrency, Monitoring } from "./src/EffectUtils";
+
+/**
+ * Enhanced service manager that fully leverages Effect's capabilities
+ */
+export { EnhancedServiceManager } from "./src/EnhancedServiceManager";
 
 // Create a helper to create a worker-based service
 import { WorkerService, type WorkerServiceOptions } from "./src/WorkerService";

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach } from "vitest";
 import { BaseService, ServiceManager } from "../index";
 
 // Silence the deprecation warnings during tests

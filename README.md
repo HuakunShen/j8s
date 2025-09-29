@@ -6,12 +6,29 @@ A lightweight service orchestration framework for JavaScript/TypeScript. Run mul
 
 ## Features
 
+- **Effect-powered Core**: Built on [effect-ts](https://github.com/Effect-TS/effect) for enhanced reliability, structured concurrency, and robust error handling
 - Run services in main thread or worker threads
 - Health checks for all services
 - Restart policies (always, unless-stopped, on-failure, no)
 - Run services on a schedule (cron jobs)
 - Timeout support for services
 - Communication between worker and main thread using RPC
+- Effect-enhanced service lifecycle management with hybrid architecture
+
+## Architecture
+
+j8s uses a **hybrid Effect-enhanced approach** with an **Adapter Pattern** to provide the best of both worlds:
+
+- **Developer Experience**: Simple class-based `IService` interface that's familiar and easy to use
+- **Internal Reliability**: Effect-powered service management APIs with robust error handling and retry strategies
+- **Backward Compatibility**: Existing service code continues to work without changes
+- **Performance**: Traditional Promise-based service execution with Effect orchestration
+
+The `IServiceAdapter` bridges your class-based services with Effect-based management:
+- **Reliable Service Management**: Effect-based APIs for service orchestration and monitoring
+- **Automatic Resource Management**: Guaranteed cleanup when services are stopped or crash
+- **Enhanced Error Handling**: Sophisticated retry policies and error recovery strategies
+- **Hybrid Architecture**: Services run using familiar async/await patterns while benefiting from Effect's management capabilities
 
 ## Basic Usage
 
