@@ -168,11 +168,20 @@ export class ServiceManager implements IServiceManager {
 
   public startAllServicesEffect(): Effect.Effect<void, Error> {
     const serviceNames = Array.from(this.managedServices.keys());
-    const startEffects = serviceNames.map((name) =>
-      this.startServiceEffect(name)
-    );
-
-    return Effect.all(startEffects).pipe(Effect.andThen(Effect.void));
+    const self = this;
+    
+    return Effect.gen(function* () {
+      // Start each service in a separate fiber to avoid blocking
+      const fibers = yield* Effect.all(
+        serviceNames.map((name) =>
+          Effect.fork(self.startServiceEffect(name))
+        )
+      );
+      
+      // Wait for all services to at least begin starting
+      // We don't wait for them to complete since they run indefinitely
+      yield* Effect.void;
+    });
   }
 
   public stopAllServicesEffect(): Effect.Effect<void, Error> {

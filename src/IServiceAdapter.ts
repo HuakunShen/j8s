@@ -46,9 +46,20 @@ export class IServiceAdapter {
       await this.service.stop();
     } catch (error) {
       console.error("Error during service stop:", error);
+      // Always reset state even if stop fails
       this.started = false;
       this.startPromise = null;
-      throw error; // Re-throw to allow ServiceManager to handle
+      
+      // For force-stop scenarios, we should be more lenient with certain errors
+      // such as connection already closed errors
+      if (error instanceof Error &&
+          (error.message.includes("Connection closed") ||
+           error.message.includes("IllegalOperationError"))) {
+        console.warn("Ignoring connection error during service shutdown:", error.message);
+        return; // Don't re-throw for connection errors during shutdown
+      }
+      
+      throw error; // Re-throw other errors to allow ServiceManager to handle
     }
 
     this.started = false;
