@@ -165,17 +165,32 @@ export { BaseEffectService, DatabaseEffectService } from "./src/IEffectService";
 /**
  * Error handling utilities
  */
-export { ServiceErrorType, StructuredServiceError, ServiceErrorHandling } from "./src/errors";
+export {
+  ServiceErrorType,
+  StructuredServiceError,
+  ServiceErrorHandling,
+} from "./src/errors";
 
 /**
  * Effect utilities for retry policies, resource management, concurrency control, and monitoring
  */
-export { RetryPolicies, ResourceManager, Concurrency, Monitoring } from "./src/EffectUtils";
+export {
+  RetryPolicies,
+  ResourceManager,
+  Concurrency,
+  Monitoring,
+} from "./src/EffectUtils";
 
 /**
  * Enhanced service manager that fully leverages Effect's capabilities
  */
 export { EnhancedServiceManager } from "./src/EnhancedServiceManager";
+
+/**
+ * Web UI and API exports
+ */
+export { createServiceManagerUI } from "./src/ui";
+export { createServiceManagerAPI } from "./src/api";
 
 // Create a helper to create a worker-based service
 import { WorkerService, type WorkerServiceOptions } from "./src/WorkerService";

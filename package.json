@@ -9,7 +9,9 @@
     "examples": "bun run examples/run-all.ts",
     "examples:basic": "bun run examples/basic-effect-service.ts",
     "examples:advanced": "bun run examples/advanced-effect-patterns.ts",
-    "examples:orchestration": "bun run examples/effect-orchestration.ts"
+    "examples:orchestration": "bun run examples/effect-orchestration.ts",
+    "examples:error-handling": "bun run examples/advanced-error-handling.ts",
+    "examples:web-ui": "bun run examples/web-ui-demo.ts"
   },
   "exports": {
     ".": "./index.ts",
