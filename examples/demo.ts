@@ -6,6 +6,7 @@ import {
   type HealthCheckResult,
 } from "../index";
 import { createServiceManagerAPI } from "../api";
+import { Schedule, Duration } from "effect";
 
 // Create a simple service that runs in the main thread
 class SimpleService extends BaseService {
@@ -54,8 +55,8 @@ class SimpleService extends BaseService {
   }
 }
 
-// Create a cron job service that runs every minute
-class CronService extends BaseService {
+// Create a scheduled job service that runs every minute
+class ScheduledService extends BaseService {
   private taskName: string;
 
   constructor(name: string, taskName: string = "default task") {
@@ -65,19 +66,19 @@ class CronService extends BaseService {
 
   async start(): Promise<void> {
     console.log(
-      `Running cron job ${this.name} - ${this.taskName} at ${new Date().toISOString()}`
+      `Running scheduled job ${this.name} - ${this.taskName} at ${new Date().toISOString()}`
     );
 
     // Simulate work
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     console.log(
-      `Cron job ${this.name} - ${this.taskName} completed at ${new Date().toISOString()}`
+      `Scheduled job ${this.name} - ${this.taskName} completed at ${new Date().toISOString()}`
     );
   }
 
   async stop(): Promise<void> {
-    console.log(`Stopping cron job ${this.name}...`);
+    console.log(`Stopping scheduled job ${this.name}...`);
   }
 }
 
@@ -102,33 +103,33 @@ async function runDemo() {
     maxRetries: 3,
   });
 
-  // // Add a cron job service
-  const backupService = new CronService("backup-service", "Daily backup");
+  // // Add a scheduled job service
+  const backupService = new ScheduledService("backup-service", "Daily backup");
   manager.addService(backupService, {
-    cronJob: {
-      schedule: "0 0 * * * *", // Run at the start of every hour (0 seconds, 0 minutes)
-      timeout: 30000, // Timeout after 30 seconds
+    scheduledJob: {
+      schedule: Schedule.cron("0 0 * * *"), // Run at midnight every day
+      timeout: Duration.seconds(30), // Timeout after 30 seconds
     },
   });
 
-  // Add a cron job service that runs every 15 seconds
-  const metricsService = new CronService("metrics-service", "Collect metrics");
+  // Add a scheduled job service that runs every 15 seconds
+  const metricsService = new ScheduledService("metrics-service", "Collect metrics");
   manager.addService(metricsService, {
-    cronJob: {
-      schedule: "*/15 * * * * *", // Run every 15 seconds
-      timeout: 5000, // Timeout after 5 seconds
+    scheduledJob: {
+      schedule: Schedule.spaced(Duration.seconds(15)), // Run every 15 seconds
+      timeout: Duration.seconds(5), // Timeout after 5 seconds
     },
   });
 
-  // Add a cron job service that runs at specific times
-  const notificationService = new CronService(
+  // Add a scheduled job service that runs at specific times
+  const notificationService = new ScheduledService(
     "notification-service",
     "Send notifications"
   );
   manager.addService(notificationService, {
-    cronJob: {
-      schedule: "0 */5 9-17 * * 1-5", // Run every 5 minutes from 9 AM to 5 PM on weekdays
-      timeout: 10000, // Timeout after 10 seconds
+    scheduledJob: {
+      schedule: Schedule.cron("0 */5 9-17 * * 1-5"), // Run every 5 minutes from 9 AM to 5 PM on weekdays
+      timeout: Duration.seconds(10), // Timeout after 10 seconds
     },
   });
 
