@@ -171,16 +171,47 @@ export class ServiceManager implements IServiceManager {
     const self = this;
     
     return Effect.gen(function* () {
-      // Start each service in a separate fiber to avoid blocking
-      const fibers = yield* Effect.all(
+      yield* Effect.logInfo(`Starting all ${serviceNames.length} services concurrently`);
+      
+      // Start each service concurrently with unbounded concurrency
+      const results = yield* Effect.all(
         serviceNames.map((name) =>
-          Effect.fork(self.startServiceEffect(name))
-        )
+          self.startServiceEffect(name).pipe(
+            Effect.tap(() => Effect.logInfo(`Service '${name}' started successfully`)),
+            Effect.map(() => ({ 
+              name, 
+              success: true, 
+              error: null as Error | null 
+            })),
+            Effect.catchAll((error) => {
+              Effect.logError(`Service '${name}' failed to start`, error);
+              return Effect.succeed({ 
+                name, 
+                success: false, 
+                error 
+              });
+            })
+          )
+        ),
+        { concurrency: 'unbounded' }
       );
       
-      // Wait for all services to at least begin starting
-      // We don't wait for them to complete since they run indefinitely
-      yield* Effect.void;
+      // Count successful and failed services
+      const successfulServices = results.filter((r: { success: boolean }) => r.success);
+      const failedServices = results.filter((r: { success: boolean }) => !r.success);
+      
+      yield* Effect.logInfo(`Service startup completed: ${successfulServices.length} successful, ${failedServices.length} failed`);
+      
+      // Check if any services failed to start
+      if (failedServices.length > 0) {
+        const errorMessages = failedServices
+          .map((f: { name: string; error: Error | null }) => `${f.name}: ${f.error?.message || 'Unknown error'}`)
+          .join(", ");
+        yield* Effect.logError(`Failed to start ${failedServices.length} services: ${errorMessages}`);
+        yield* Effect.fail(new Error(`Failed to start services: ${errorMessages}`));
+      }
+      
+      yield* Effect.logInfo(`All ${serviceNames.length} services started successfully`);
     });
   }
 
