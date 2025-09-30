@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "format": "prettier --write .",
+    "test": "vitest",
     "check-types": "tsc --noEmit",
     "examples": "bun run examples/run-all.ts",
     "examples:basic": "bun run examples/basic-effect-service.ts",

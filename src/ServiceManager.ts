@@ -59,24 +59,43 @@ export class ServiceManager implements IServiceManager {
       return Effect.fail(new Error(`Service '${serviceName}' not found`));
     }
 
-    return Effect.gen(function* () {
-      // Clear any pending restart
-      if (managedService.restartTimer) {
-        clearTimeout(managedService.restartTimer);
-        managedService.restartTimer = undefined;
-      }
+    // Clear any pending restart
+    if (managedService.restartTimer) {
+      clearTimeout(managedService.restartTimer);
+      managedService.restartTimer = undefined;
+    }
 
-      // Set status to running
-      managedService.status = "running";
+    managedService.status = "running";
 
-      // Start the service using the hybrid adapter approach
-      yield* Effect.tryPromise({
-        try: () => managedService.adapter.start(),
-        catch: (e) => (e instanceof Error ? e : new Error(String(e))),
-      });
+    const startEffect = Effect.tryPromise({
+      try: () => managedService.adapter.start(),
+      catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+    });
 
-      // Reset restart count on successful start
-      managedService.restartCount = 0;
+    return Effect.matchEffect(startEffect, {
+      onFailure: (error) => {
+        // Sequence of effects to run on failure
+        const onFailureEffect = Effect.sync(() => {
+          console.error(`Service '${serviceName}' failed:`, error);
+          managedService.status = "crashed";
+        }).pipe(
+          Effect.flatMap(() => {
+            if (managedService.config.restartPolicy !== "no") {
+              return Effect.tryPromise(() =>
+                this.scheduleServiceRestart(managedService)
+              );
+            }
+            return Effect.void;
+          }),
+          // Always propagate the original error
+          Effect.andThen(Effect.fail(error))
+        );
+        return onFailureEffect;
+      },
+      onSuccess: () => {
+        managedService.restartCount = 0;
+        return Effect.void;
+      },
     });
   }
 
@@ -86,29 +105,36 @@ export class ServiceManager implements IServiceManager {
       return Effect.fail(new Error(`Service '${serviceName}' not found`));
     }
 
-    return Effect.gen(function* () {
-      // Clear any pending restart
-      if (managedService.restartTimer) {
-        clearTimeout(managedService.restartTimer);
-        managedService.restartTimer = undefined;
-      }
+    // Clear any pending restart
+    if (managedService.restartTimer) {
+      clearTimeout(managedService.restartTimer);
+      managedService.restartTimer = undefined;
+    }
 
-      // Stop any active scheduled job
-      if (managedService.scheduledJobFiber) {
-        Effect.runFork(Fiber.interrupt(managedService.scheduledJobFiber));
-        managedService.scheduledJobFiber = undefined;
-      }
+    // Stop any active scheduled job
+    if (managedService.scheduledJobFiber) {
+      Effect.runFork(Fiber.interrupt(managedService.scheduledJobFiber));
+      managedService.scheduledJobFiber = undefined;
+    }
 
-      managedService.status = "stopping";
+    managedService.status = "stopping";
 
-      // Stop the service using the hybrid adapter approach
-      yield* Effect.tryPromise({
-        try: () => managedService.adapter.stop(),
-        catch: (e) => (e instanceof Error ? e : new Error(String(e))),
-      });
+    const stopEffect = Effect.tryPromise({
+      try: () => managedService.adapter.stop(),
+      catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+    });
 
-      managedService.status = "stopped";
-      managedService.restartCount = 0;
+    return Effect.matchEffect(stopEffect, {
+      onFailure: (error) => {
+        console.error(`Error stopping service '${serviceName}':`, error);
+        managedService.status = "crashed";
+        return Effect.fail(error);
+      },
+      onSuccess: () => {
+        managedService.status = "stopped";
+        managedService.restartCount = 0;
+        return Effect.void;
+      },
     });
   }
 
@@ -210,135 +236,37 @@ export class ServiceManager implements IServiceManager {
   }
 
   public async startService(serviceName: string): Promise<void> {
-    const managedService = this.managedServices.get(serviceName);
-    if (!managedService) {
-      throw new Error(`Service '${serviceName}' not found`);
-    }
-
-    // Clear any pending restart
-    if (managedService.restartTimer) {
-      clearTimeout(managedService.restartTimer);
-      managedService.restartTimer = undefined;
-    }
-
-    // Set status to running
-    managedService.status = "running";
-
-    try {
-      // Start the service using the hybrid adapter approach
-      await managedService.adapter.start();
-
-      console.log(`Successfully started service '${serviceName}'`);
-
-      // Reset restart count on successful start
-      managedService.restartCount = 0;
-    } catch (error) {
-      // Service failed immediately
-      console.error(`Service '${serviceName}' failed:`, error);
-      managedService.status = "crashed";
-
-      // Handle restart based on policy
-      if (managedService.config.restartPolicy !== "no") {
-        await this.scheduleServiceRestart(managedService);
-      }
-
-      throw error;
-    }
+    await Effect.runPromise(this.startServiceEffect(serviceName));
   }
 
   public async stopService(serviceName: string): Promise<void> {
-    const managedService = this.managedServices.get(serviceName);
-    if (!managedService) {
-      throw new Error(`Service '${serviceName}' not found`);
-    }
-
-    // Clear any pending restart
-    if (managedService.restartTimer) {
-      clearTimeout(managedService.restartTimer);
-      managedService.restartTimer = undefined;
-    }
-
-    // Stop any active cron job
-    if (managedService.scheduledJobFiber) {
-      Effect.runFork(Fiber.interrupt(managedService.scheduledJobFiber));
-    }
-
-    managedService.status = "stopping";
-
-    try {
-      // Stop the service using the hybrid adapter approach
-      await managedService.adapter.stop();
-
-      managedService.status = "stopped";
-      managedService.restartCount = 0;
-    } catch (error) {
-      console.error(`Error stopping service '${serviceName}':`, error);
-      managedService.status = "crashed";
-      throw error; // Re-throw to allow caller to handle
-    }
+    await Effect.runPromise(this.stopServiceEffect(serviceName));
   }
 
   public async restartService(serviceName: string): Promise<void> {
-    await this.stopService(serviceName);
-    await this.startService(serviceName);
+    await Effect.runPromise(this.restartServiceEffect(serviceName));
   }
 
   public async healthCheckService(
     serviceName: string
   ): Promise<HealthCheckResult> {
-    const managedService = this.managedServices.get(serviceName);
-    if (!managedService) {
-      throw new Error(`Service '${serviceName}' not found`);
-    }
-
-    // Use the adapter's Effect-based health check
-    const serviceHealth = await Effect.runPromise(
-      managedService.adapter.healthCheck
+    return await Effect.runPromise(
+      this.healthCheckServiceEffect(serviceName)
     );
-
-    // Override the status with our managed status
-    return {
-      ...serviceHealth,
-      status: managedService.status, // Use our managed status, not the service's
-    };
   }
 
   public async startAllServices(): Promise<void> {
-    const startPromises = Array.from(this.managedServices.values()).map(
-      (managedService) => this.startService(managedService.name)
-    );
-
-    await Promise.all(startPromises);
+    await Effect.runPromise(this.startAllServicesEffect());
   }
 
   public async stopAllServices(): Promise<void> {
-    const services = Array.from(this.managedServices.values());
-    const stopResults = await Promise.allSettled(
-      services.map((managedService) => this.stopService(managedService.name))
-    );
-
-    stopResults.forEach((result, idx) => {
-      if (result.status === "rejected") {
-        const serviceName = services[idx]?.name;
-        console.error(
-          `Failed to stop service '${serviceName}':`,
-          result.reason
-        );
-      }
-    });
+    await Effect.runPromise(this.stopAllServicesEffect());
   }
 
   public async healthCheckAllServices(): Promise<
     Record<string, HealthCheckResult>
   > {
-    const results: Record<string, HealthCheckResult> = {};
-
-    for (const [name, managedService] of this.managedServices.entries()) {
-      // Call healthCheckService for each service
-      results[name] = await this.healthCheckService(name);
-    }
-
-    return results;
+    return await Effect.runPromise(this.healthCheckAllServicesEffect());
   }
 
   private async scheduleServiceRestart(
