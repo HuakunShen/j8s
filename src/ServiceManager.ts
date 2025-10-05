@@ -171,9 +171,7 @@ export class ServiceManager implements IServiceManager {
     const self = this;
     
     return Effect.gen(function* () {
-      yield* Effect.logInfo(`Starting all ${serviceNames.length} services concurrently`);
-      
-      // Start each service concurrently with unbounded concurrency
+      // Start all services (including scheduled ones)
       const results = yield* Effect.all(
         serviceNames.map((name) =>
           self.startServiceEffect(name).pipe(
@@ -200,7 +198,9 @@ export class ServiceManager implements IServiceManager {
       const successfulServices = results.filter((r: { success: boolean }) => r.success);
       const failedServices = results.filter((r: { success: boolean }) => !r.success);
       
-      yield* Effect.logInfo(`Service startup completed: ${successfulServices.length} successful, ${failedServices.length} failed`);
+      yield* Effect.logInfo(
+        `Service startup: ${successfulServices.length} successful, ${failedServices.length} failed`
+      );
       
       // Check if any services failed to start
       if (failedServices.length > 0) {
@@ -211,7 +211,7 @@ export class ServiceManager implements IServiceManager {
         yield* Effect.fail(new Error(`Failed to start services: ${errorMessages}`));
       }
       
-      yield* Effect.logInfo(`All ${serviceNames.length} services started successfully`);
+      yield* Effect.logInfo(`All ${serviceNames.length} services initialized successfully`);
     });
   }
 
@@ -392,16 +392,30 @@ export class ServiceManager implements IServiceManager {
         managedService.status = "running";
 
         // Start the service using Effect-based approach
-        const serviceEffect = Effect.promise(() =>
-          managedService.adapter.start()
-        );
+        const serviceEffect = Effect.tryPromise({
+          try: () => managedService.adapter.start(),
+          catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+        });
 
-        // Apply timeout if configured
+        // Apply timeout if configured - race against a sleep + fail
         const timedServiceEffect = timeout
-          ? Effect.timeout(serviceEffect, timeout)
+          ? Effect.race(
+              serviceEffect,
+              Effect.sleep(timeout).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    new Error(`Service '${name}' timed out after ${Duration.toMillis(timeout)}ms`)
+                  )
+                )
+              )
+            )
           : serviceEffect;
 
         const result = yield* Effect.either(timedServiceEffect);
+
+        // Reset adapter state after each scheduled run to allow next execution
+        // This is critical for scheduled jobs that need to run repeatedly
+        yield* Effect.promise(() => managedService.adapter.stop());
 
         if (result._tag === "Left") {
           console.error(
@@ -409,19 +423,26 @@ export class ServiceManager implements IServiceManager {
             result.left
           );
           managedService.status = "crashed";
+          // Return void to continue scheduling even on failure
+          return;
         } else {
           // Service completed successfully
           if (managedService.status === "running") {
             managedService.status = "stopped";
-            console.log(`Service '${name}' completed successfully`);
           }
+          // Return void to continue scheduling
+          return;
         }
       });
 
-      // Schedule the job to repeat with proper error handling
-      yield* Effect.schedule(
-        Effect.catchAllCause(jobEffect, () => Effect.void),
-        schedule
+      // Use Effect.repeat with the schedule instead of Effect.schedule
+      // This ensures the job continues repeating indefinitely
+      yield* jobEffect.pipe(
+        Effect.repeat(schedule),
+        Effect.catchAllCause((cause) => {
+          console.error(`Scheduled job '${name}' encountered fatal error:`, cause);
+          return Effect.void;
+        })
       );
     });
 

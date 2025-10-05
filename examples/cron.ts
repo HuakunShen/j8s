@@ -165,7 +165,7 @@ async function alternativeScheduleExamples() {
 // Main execution
 if (import.meta.main) {
   await simpleCronExample();
-  await alternativeScheduleExamples();
+  // await alternativeScheduleExamples();
   
   console.log("\n🎉 All cron job examples completed!");
   console.log("\n💡 Key Benefits of Effect-based Scheduling:");

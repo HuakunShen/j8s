@@ -3,21 +3,23 @@ import {
   WorkerParentIO,
   type DestroyableIoInterface,
 } from "@kunkun/kkrpc";
-// import { Worker } from "node:worker_threads";
-import { Worker as NodeWorker } from "node:worker_threads";
-import type { WorkerOptions } from "node:worker_threads";
 import type { HealthCheckResult, IService, ServiceStatus } from "./interface";
 import { BaseService } from "./BaseService";
 
+// Use the global Worker API (web workers) instead of node:worker_threads
+// kkrpc expects the web Worker API which is available in Bun/Deno/browsers
+// @ts-ignore - Worker is a global in Bun
+type WorkerType = Worker;
+
 export interface WorkerServiceOptions {
   workerURL: string | URL;
-  workerOptions?: WorkerOptions;
+  workerOptions?: any; // Use any for web worker options (compatible with both Bun/Deno/browsers)
   workerData?: any; // Custom data to be passed to the worker
   autoTerminate?: boolean; // Whether to auto-terminate the worker after start() completes
 }
 
 export class WorkerService extends BaseService {
-  private worker: NodeWorker | null = null;
+  private worker: WorkerType | null = null;
   private io: DestroyableIoInterface | null = null;
   private rpc: RPCChannel<object, IService, DestroyableIoInterface> | null =
     null;
@@ -38,38 +40,38 @@ export class WorkerService extends BaseService {
 
     try {
       // Merge default worker options with custom options and add workerData
-      const workerOptions: WorkerOptions = {
+      const workerOptions: any = {
+        type: "module", // Always use module type for ESM
         ...(this.options.workerOptions || {}),
         ...(this.options.workerData !== undefined
           ? { workerData: this.options.workerData }
           : {}),
       };
 
-      this.worker = new NodeWorker(this.options.workerURL.toString(), workerOptions);
-      this.io = new WorkerParentIO(this.worker as any);
+      // Create worker with URL.href like kkrpc tests do
+      const workerPath = typeof this.options.workerURL === 'string' 
+        ? this.options.workerURL
+        : this.options.workerURL.href;
+      
+      // Use global Worker API (web workers) - available in Bun/Deno/browsers
+      this.worker = new Worker(workerPath, workerOptions);
+      this.io = new WorkerParentIO(this.worker);
+      
+      // Create RPC channel - note: main thread doesn't need to expose anything
       this.rpc = new RPCChannel<object, IService, DestroyableIoInterface>(
         this.io,
         {}
       );
       this.api = this.rpc.getAPI();
 
-      // Monitor worker termination
-      this.worker.addListener("error", (event) => {
+      // Monitor worker events using web Worker API
+      this.worker.addEventListener("error", (event) => {
         console.error(`Worker error event for ${this.name}:`, event);
         this.workerStatus = "crashed";
         this.cleanup();
       });
-      // this.worker.addEventListener("error", (event) => {
-      //   console.error(`Worker error event for ${this.name}:`, event);
-      //   this.workerStatus = "crashed";
-      //   this.cleanup();
-      // });
 
-      // this.worker.addEventListener("messageerror", (event) => {
-      //   console.error(`Worker message error for ${this.name}:`, event);
-      //   this.workerStatus = "unhealthy";
-      // });
-      this.worker.addListener("messageerror", (event) => {
+      this.worker.addEventListener("messageerror", (event) => {
         console.error(`Worker message error for ${this.name}:`, event);
         this.workerStatus = "unhealthy";
       });
