@@ -4,6 +4,8 @@ import {
   type DestroyableIoInterface,
 } from "@kunkun/kkrpc";
 import type { IService } from "./interface";
+import { NodeWorkerChildIO } from "./NodeWorkerIO";
+import { isNode } from "./runtime";
 
 /**
  * Exposes a service implementation in a worker thread.
@@ -46,7 +48,16 @@ import type { IService } from "./interface";
  * ```
  */
 export function expose(service: IService): void {
-  const io: DestroyableIoInterface = new WorkerChildIO();
+  // Detect runtime: Node.js uses worker_threads, Bun/Deno/browsers use Web Workers
+  let io: DestroyableIoInterface;
+  
+  if (isNode()) {
+    // Node.js worker thread - uses parentPort and EventEmitter API
+    io = new NodeWorkerChildIO();
+  } else {
+    // Web Worker (Bun/Deno/browsers) - uses self.postMessage() API
+    io = new WorkerChildIO();
+  }
 
   // Create RPC channel and expose the service
   const rpc = new RPCChannel<IService, object, DestroyableIoInterface>(io, {

@@ -5,10 +5,25 @@ import {
 } from "@kunkun/kkrpc";
 import type { HealthCheckResult, IService, ServiceStatus } from "./interface";
 import { BaseService } from "./BaseService";
+import { NodeWorkerParentIO } from "./NodeWorkerIO";
+import { isNode } from "./runtime";
 
-// Use the global Worker API (web workers) instead of node:worker_threads
+// Support both Bun (global Worker) and Node.js (worker_threads.Worker)
 // kkrpc expects the web Worker API which is available in Bun/Deno/browsers
-// @ts-ignore - Worker is a global in Bun
+// For Node.js, we use worker_threads.Worker which has a compatible API
+function getWorkerConstructor(): any {
+  if (isNode()) {
+    // Node.js worker_threads
+    // @ts-ignore - Node.js specific import
+    const { Worker: NodeWorker } = require("worker_threads");
+    return NodeWorker;
+  }
+  
+  // Bun/Deno/browsers use global Worker
+  return Worker;
+}
+
+const WorkerConstructor = getWorkerConstructor();
 type WorkerType = Worker;
 
 export interface WorkerServiceOptions {
@@ -53,9 +68,19 @@ export class WorkerService extends BaseService {
         ? this.options.workerURL
         : this.options.workerURL.href;
       
-      // Use global Worker API (web workers) - available in Bun/Deno/browsers
-      this.worker = new Worker(workerPath, workerOptions);
-      this.io = new WorkerParentIO(this.worker);
+      // Use WorkerConstructor (supports both Bun and Node.js)
+      this.worker = new WorkerConstructor(workerPath, workerOptions);
+      
+      if (!this.worker) {
+        throw new Error(`Failed to create worker for ${this.name}`);
+      }
+      
+      // Use Node.js-specific IO if we're using Node.js worker_threads
+      // Detect by checking if the worker has EventEmitter methods
+      const isNodeWorker = typeof (this.worker as any).on === 'function';
+      this.io = isNodeWorker 
+        ? new NodeWorkerParentIO(this.worker)
+        : new WorkerParentIO(this.worker);
       
       // Create RPC channel - note: main thread doesn't need to expose anything
       this.rpc = new RPCChannel<object, IService, DestroyableIoInterface>(
@@ -64,17 +89,28 @@ export class WorkerService extends BaseService {
       );
       this.api = this.rpc.getAPI();
 
-      // Monitor worker events using web Worker API
-      this.worker.addEventListener("error", (event) => {
+      // Monitor worker events - handle both Web Worker API and Node.js EventEmitter API
+      const errorHandler = (event: any) => {
         console.error(`Worker error event for ${this.name}:`, event);
         this.workerStatus = "crashed";
         this.cleanup();
-      });
-
-      this.worker.addEventListener("messageerror", (event) => {
+      };
+      
+      const messageErrorHandler = (event: any) => {
         console.error(`Worker message error for ${this.name}:`, event);
         this.workerStatus = "unhealthy";
-      });
+      };
+
+      // Check if it's a Node.js Worker (EventEmitter) or Web Worker
+      if (typeof (this.worker as any).on === 'function') {
+        // Node.js Worker (EventEmitter API)
+        (this.worker as any).on('error', errorHandler);
+        (this.worker as any).on('messageerror', messageErrorHandler);
+      } else if (typeof (this.worker as any).addEventListener === 'function') {
+        // Web Worker API (Bun/Deno/browsers)
+        (this.worker as any).addEventListener('error', errorHandler);
+        (this.worker as any).addEventListener('messageerror', messageErrorHandler);
+      }
 
       // Handle clean worker exit
       if (this.options.autoTerminate) {

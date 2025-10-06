@@ -147,6 +147,16 @@ export { WorkerService } from "./src/WorkerService";
 export type { WorkerServiceOptions } from "./src/WorkerService";
 
 /**
+ * Node.js worker_threads compatible IO adapters for kkrpc
+ */
+export { NodeWorkerParentIO, NodeWorkerChildIO } from "./src/NodeWorkerIO";
+
+/**
+ * Runtime detection utilities
+ */
+export { isNode, isBun, isDeno, getRuntime } from "./src/runtime";
+
+/**
  * Exposes a service implementation in a worker thread.
  * This function handles all the boilerplate code needed to expose a service
  * implementation through RPC to the main thread.
