@@ -124,12 +124,15 @@ export type {
   ScheduledJobConfig,
   ServiceConfig,
   IServiceManager,
+  ObservabilityConfig,
+  ServiceManagerConfig,
 } from "./src/interface";
 
 /**
  * Base class for all services.
  */
 export { BaseService } from "./src/BaseService";
+export { IEffectServiceAdapter } from "./src/IEffectServiceAdapter";
 
 /**
  * Service manager for managing all services.

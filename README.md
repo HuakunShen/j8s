@@ -486,9 +486,81 @@ Monitoring.Histogram.observe("responseTime", 150);
 Monitoring.Gauge.set("activeConnections", 42);
 ```
 
-### Service-Owned Observability
+### Automatic Observability (Recommended) ⭐
 
-j8s supports services defining their own observability layers through the `IService` interface:
+j8s can automatically handle OTLP observability for all services with zero boilerplate:
+
+```typescript
+import { BaseService, ServiceManager } from "j8s";
+import { Effect } from "effect";
+
+// Services are clean - NO observability code!
+class MyService extends BaseService {
+  constructor(private runEffect: EffectRunner) {
+    super("my-service");
+  }
+
+  async start(): Promise<void> {
+    await this.runEffect(
+      Effect.gen(function* () {
+        yield* Effect.logInfo("Starting service...");
+        // Logs automatically go to OTLP!
+      })
+    );
+  }
+
+  async stop(): Promise<void> {
+    await this.runEffect(
+      Effect.gen(function* () {
+        yield* Effect.logInfo("Stopping service...");
+      })
+    );
+  }
+
+  async healthCheck(): Promise<HealthCheckResult> {
+    return { status: "running" };
+  }
+}
+
+// Configure observability ONCE in ServiceManager
+const manager = new ServiceManager({
+  observability: {
+    enabled: true,  // ✨ That's it!
+    otlpBaseUrl: "http://localhost:4318",  // Optional, defaults to localhost:4318
+    serviceNamespace: "my-app",  // Optional, defaults to "default"
+    serviceVersion: "1.0.0",  // Optional, defaults to "1.0.0"
+    defaultAttributes: {  // Optional custom attributes
+      "team": "platform",
+      "environment": "production",
+    },
+  },
+});
+
+// Just add services - they automatically get observability!
+manager.addService(new MyService(runEffect), { restartPolicy: "always" });
+```
+
+**Benefits:**
+- ✨ **Zero boilerplate** - No observability code in services
+- 🎯 **Centralized config** - One place to configure observability for all services
+- 📊 **Automatic layers** - j8s creates unique OTLP layer per service
+- 🔧 **Flexible** - Services can still provide custom layers if needed
+- 🚀 **Production-ready** - Sensible defaults with full customization
+
+**How it works:**
+1. Enable observability in ServiceManager constructor
+2. j8s automatically creates an OTLP layer for each service
+3. Each service gets its own unique `serviceName` in OTLP
+4. All services share the same namespace and default attributes
+5. Services can override with their own `observabilityLayer` property
+
+See [`examples/automatic-observability.ts`](./examples/automatic-observability.ts) for a complete working example.
+
+---
+
+### Service-Owned Observability (Advanced)
+
+For advanced use cases where you need per-service customization, services can define their own observability layers through the `IService` interface:
 
 ```typescript
 import { BaseService, ServiceManager } from "j8s";
@@ -545,6 +617,28 @@ This approach provides:
 - **Type Safety**: Compile-time verification of observability layers
 - **Testability**: Easy to inject mock layers for testing
 - **Consistency**: Same pattern for all services
+
+**⚠️ Important Note**: With the current Promise-based service architecture, services must manually apply their observability layer when running Effects. See [`examples/observability-multi-service.ts`](./examples/observability-multi-service.ts) for a complete working example with multiple services reporting separately to Grafana.
+
+**Pattern for Effect-based methods**:
+```typescript
+async start(): Promise<void> {
+  const self = this
+  await this.runEffect(
+    Effect.gen(function* () {
+      yield* Effect.logInfo("Starting...")
+      // service logic
+    }).pipe(
+      Effect.provide(self.observabilityLayer)  // Required!
+    )
+  )
+}
+```
+
+For more details on the observability pattern, see:
+- Example: [`examples/observability-multi-service.ts`](./examples/observability-multi-service.ts)
+- Pattern Guide: [`examples/OBSERVABILITY_PATTERN.md`](./examples/OBSERVABILITY_PATTERN.md)
+- Design Proposal: [`OBSERVABILITY_DESIGN_PROPOSAL.md`](./OBSERVABILITY_DESIGN_PROPOSAL.md)
 
 ## 🧪 Testing
 

@@ -30,6 +30,8 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@effect/opentelemetry": "catalog:",
+    "@effect/platform": "catalog:",
     "@hono/valibot-validator": "^0.5.2",
     "@kunkun/kkrpc": "npm:@jsr/kunkun__kkrpc@0.2.2",
     "@scalar/hono-api-reference": "^0.8.9",

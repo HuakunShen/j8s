@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import type { HealthCheckResult } from "./interface";
 
 /**
@@ -7,6 +7,7 @@ import type { HealthCheckResult } from "./interface";
  */
 export interface IEffectService {
   readonly name: string;
+  observabilityLayer?: Layer.Layer<never, never, never>;
   
   /**
    * Start the service as an Effect
@@ -34,6 +35,7 @@ export interface IEffectService {
  */
 export abstract class BaseEffectService implements IEffectService {
   public abstract readonly name: string;
+  public observabilityLayer?: Layer.Layer<never, never, never>;
   
   public abstract startEffect(): Effect.Effect<void, Error>;
   public abstract stopEffect(): Effect.Effect<void, Error>;

@@ -17,7 +17,69 @@ This directory contains comprehensive examples demonstrating j8s capabilities, f
 
 ### 🚀 Getting Started
 
-#### 1. [`basic-effect-service.ts`](./basic-effect-service.ts)
+#### 1. [`observability-multi-service.ts`](./observability-multi-service.ts) ⭐ RECOMMENDED
+
+**Multi-Service Automatic OTLP Observability (Zero Boilerplate)**
+
+The **comprehensive example** demonstrating j8s automatic observability with multiple service types:
+
+- ✨ **Zero observability code in services** - Services focus on business logic only
+- 🎯 **One-line config** - Enable observability in ServiceManager with `observability: { enabled: true }`
+- 📊 **Automatic OTLP layers** - j8s creates unique layers for each service
+- 🔧 **Centralized configuration** - All observability settings in one place
+- 🚀 **Mixed service types** - Shows both Promise-based and Effect-based services
+- 📝 **Educational** - Comprehensive explanation of service types and patterns
+
+**What You'll Learn:**
+```typescript
+// Pure Promise-based service - NO Effect code needed!
+class UserService extends BaseService {
+  async start() {
+    console.log("Starting...")  // j8s wraps with OTLP automatically!
+    // Your business logic here
+  }
+}
+
+// Effect-based service - Full Effect logging
+class NotificationService extends BaseEffectService {
+  startEffect = Effect.gen(function* () {
+    yield* Effect.logInfo("Starting...")  // Logs go to OTLP automatically!
+    // Your Effect-based business logic here
+  });
+}
+
+// Configure observability ONCE for ALL services
+const manager = new ServiceManager({
+  observability: {
+    enabled: true,  // ✨ That's it!
+    otlpBaseUrl: "http://localhost:4318",
+    serviceNamespace: "my-app",
+  }
+})
+
+// Both get automatic observability!
+manager.addService(new UserService());
+manager.addService(new NotificationService());
+```
+
+```bash
+# Prerequisites: OTLP endpoint running (default: localhost:4318)
+bun run examples/observability-multi-service.ts
+
+# Or with custom OTLP endpoint
+OTLP_BASE_URL=http://your-otel-collector:4318 bun run examples/observability-multi-service.ts
+```
+
+**Expected Result:**
+- Three services in Grafana: `user-service`, `payment-service`, and `notification-service`
+- All logs automatically attributed to correct service
+- Shared namespace: `j8s-examples`
+- Zero observability boilerplate in service code
+- Demonstrates both Promise and Effect-based service patterns
+
+---
+
+#### 2. [`basic-effect-service.ts`](./basic-effect-service.ts)
 
 **Basic Service Management with Effect Integration**
 
@@ -32,7 +94,7 @@ Learn the fundamentals of j8s with Effect:
 bun run examples:basic
 ```
 
-#### 2. [`demo.ts`](./demo.ts)
+#### 3. [`demo.ts`](./demo.ts)
 
 **Complete Service Management Demo**
 
@@ -49,7 +111,7 @@ bun run demo.ts
 
 ### 🔧 Advanced Patterns
 
-#### 3. [`advanced-effect-patterns.ts`](./advanced-effect-patterns.ts)
+#### 4. [`advanced-effect-patterns.ts`](./advanced-effect-patterns.ts)
 
 **Advanced Effect Patterns for Production**
 
@@ -65,7 +127,7 @@ Explore sophisticated patterns for reliable service management:
 bun run examples:advanced
 ```
 
-#### 4. [`effect-orchestration.ts`](./effect-orchestration.ts)
+#### 5. [`effect-orchestration.ts`](./effect-orchestration.ts)
 
 **Enterprise-Grade Service Orchestration**
 
@@ -81,7 +143,7 @@ Advanced patterns for production deployments:
 bun run examples:orchestration
 ```
 
-#### 5. [`enhanced-usage-example.ts`](./enhanced-usage-example.ts)
+#### 6. [`enhanced-usage-example.ts`](./enhanced-usage-example.ts)
 
 **Enhanced Service Manager Features**
 
@@ -99,7 +161,7 @@ bun run enhanced-usage-example.ts
 
 ### 🛡️ Error Handling & Reliability
 
-#### 6. [`restart-policy.ts`](./restart-policy.ts) & [`worker-restart-policy.ts`](./worker-restart-policy.ts)
+#### 7. [`restart-policy.ts`](./restart-policy.ts) & [`worker-restart-policy.ts`](./worker-restart-policy.ts)
 
 **Service Restart Policies**
 
@@ -115,7 +177,7 @@ bun run restart-policy.ts
 bun run worker-restart-policy.ts
 ```
 
-#### 7. [`restart.ts`](./restart.ts)
+#### 8. [`restart.ts`](./restart.ts)
 
 **Service Restart Strategies**
 
@@ -131,7 +193,7 @@ bun run restart.ts
 
 ### ⏰ Scheduling & Automation
 
-#### 8. [`cron.ts`](./cron.ts)
+#### 9. [`cron.ts`](./cron.ts)
 
 **Scheduled Service Execution**
 
@@ -146,7 +208,7 @@ Implement cron-like scheduling for services:
 bun run cron.ts
 ```
 
-#### 9. [`effect-scheduling.ts`](./effect-scheduling.ts)
+#### 10. [`effect-scheduling.ts`](./effect-scheduling.ts)
 
 **Advanced Scheduling with Effect**
 
@@ -163,7 +225,7 @@ bun run effect-scheduling.ts
 
 ### 🌐 Web Services & APIs
 
-#### 10. [`rest-api.ts`](./rest-api.ts)
+#### 11. [`rest-api.ts`](./rest-api.ts)
 
 **REST API Integration**
 
@@ -181,7 +243,7 @@ bun run rest-api.ts
 
 ### 👷 Worker Thread Services
 
-#### 11. [`worker-with-data.ts`](./worker-with-data.ts)
+#### 12. [`worker-with-data.ts`](./worker-with-data.ts)
 
 **Worker Services with Custom Data**
 
@@ -195,7 +257,7 @@ Pass configuration and data to worker services:
 bun run worker-with-data.ts
 ```
 
-#### 12. [`worker-failure.ts`](./worker-failure.ts)
+#### 13. [`worker-failure.ts`](./worker-failure.ts)
 
 **Worker Service Failure Handling**
 

@@ -1,4 +1,5 @@
 import type { Effect, Schedule, Duration, Layer } from "effect";
+import type { IEffectService } from "./IEffectService";
 
 export type ServiceStatus =
   | "stopped"
@@ -33,9 +34,47 @@ export interface ServiceConfig {
   scheduledJob?: ScheduledJobConfig;
 }
 
+export interface ObservabilityConfig {
+  /**
+   * Enable automatic OTLP observability for all services
+   * @default false
+   */
+  enabled: boolean;
+  
+  /**
+   * OTLP endpoint URL
+   * @default "http://localhost:4318"
+   */
+  otlpBaseUrl?: string;
+  
+  /**
+   * Default service namespace for all services
+   * @default "default"
+   */
+  serviceNamespace?: string;
+  
+  /**
+   * Default service version
+   * @default "1.0.0"
+   */
+  serviceVersion?: string;
+  
+  /**
+   * Default attributes for all services
+   */
+  defaultAttributes?: Record<string, string>;
+}
+
+export interface ServiceManagerConfig {
+  /**
+   * Observability configuration for automatic OTLP integration
+   */
+  observability?: ObservabilityConfig;
+}
+
 export interface IServiceManager {
-  services: IService[];
-  addService(service: IService, config?: ServiceConfig): void;
+  services: (IService | IEffectService)[];
+  addService(service: IService | IEffectService, config?: ServiceConfig): void;
   removeService(serviceName: string): void;
   startService(serviceName: string): Promise<void>;
   stopService(serviceName: string): Promise<void>;
