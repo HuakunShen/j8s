@@ -486,6 +486,66 @@ Monitoring.Histogram.observe("responseTime", 150);
 Monitoring.Gauge.set("activeConnections", 42);
 ```
 
+### Service-Owned Observability
+
+j8s supports services defining their own observability layers through the `IService` interface:
+
+```typescript
+import { BaseService, ServiceManager } from "j8s";
+import { Layer } from "effect";
+import * as Otlp from "@effect/opentelemetry/Otlp";
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
+
+class MyService extends BaseService {
+  readonly observabilityLayer: Layer.Layer<never, never, never>;
+
+  constructor(name: string, otlpBaseUrl: string = "http://localhost:4318") {
+    super(name);
+    
+    // Service owns its observability layer
+    this.observabilityLayer = Otlp.layer({
+      baseUrl: otlpBaseUrl,
+      resource: {
+        serviceName: "my-service",
+        serviceVersion: "1.0.0",
+        attributes: {
+          "service.namespace": "my-app",
+          "service.instance.id": String(process.pid),
+          "deployment.environment": process.env.NODE_ENV ?? "development",
+        },
+      },
+    }).pipe(Layer.provide(FetchHttpClient.layer));
+  }
+
+  async start(): Promise<void> {
+    // j8s automatically applies the observabilityLayer
+    console.log("Service started with observability");
+  }
+
+  async stop(): Promise<void> {
+    console.log("Service stopped");
+  }
+
+  async healthCheck(): Promise<HealthCheckResult> {
+    return { status: "running" };
+  }
+}
+
+const manager = new ServiceManager();
+const service = new MyService("my-service", "http://localhost:4318");
+
+// Just add the service - it brings its own observability!
+manager.addService(service, { restartPolicy: "always" });
+await manager.startServiceEffect("my-service");
+```
+
+This approach provides:
+- **Encapsulation**: Services own their observability configuration
+- **Simplicity**: No external setup needed after service creation
+- **Type Safety**: Compile-time verification of observability layers
+- **Testability**: Easy to inject mock layers for testing
+- **Consistency**: Same pattern for all services
+
 ## 🧪 Testing
 
 j8s is thoroughly tested with comprehensive test coverage:
