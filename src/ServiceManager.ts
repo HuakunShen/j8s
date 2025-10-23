@@ -7,7 +7,7 @@ import type {
   ServiceStatus,
   ScheduledJobConfig,
 } from "./interface";
-import { Effect, Schedule, Duration, Fiber } from "effect";
+import { Effect, Schedule, Duration, Fiber, Layer } from "effect";
 import { IServiceAdapter } from "./IServiceAdapter";
 
 interface ManagedService {
@@ -18,6 +18,7 @@ interface ManagedService {
   restartCount: number;
   restartTimer?: NodeJS.Timeout;
   scheduledJobFiber?: Fiber.RuntimeFiber<void, Error>;
+  observabilityLayer?: Layer.Layer<never, never, never>;
 }
 
 export class ServiceManager implements IServiceManager {
@@ -42,6 +43,7 @@ export class ServiceManager implements IServiceManager {
       config,
       status: "stopped",
       restartCount: 0,
+      observabilityLayer: service.observabilityLayer, // Use service's observability layer
     };
 
     this.managedServices.set(service.name, managedService);
@@ -72,7 +74,12 @@ export class ServiceManager implements IServiceManager {
       catch: (e) => (e instanceof Error ? e : new Error(String(e))),
     });
 
-    return Effect.matchEffect(startEffect, {
+    // Apply the service-specific observability layer if available
+    const startEffectWithObservability = managedService.observabilityLayer
+      ? startEffect.pipe(Effect.provide(managedService.observabilityLayer))
+      : startEffect;
+
+    return Effect.matchEffect(startEffectWithObservability, {
       onFailure: (error) => {
         // Sequence of effects to run on failure
         const onFailureEffect = Effect.sync(() => {
@@ -124,7 +131,12 @@ export class ServiceManager implements IServiceManager {
       catch: (e) => (e instanceof Error ? e : new Error(String(e))),
     });
 
-    return Effect.matchEffect(stopEffect, {
+    // Apply the service-specific observability layer if available
+    const stopEffectWithObservability = managedService.observabilityLayer
+      ? stopEffect.pipe(Effect.provide(managedService.observabilityLayer))
+      : stopEffect;
+
+    return Effect.matchEffect(stopEffectWithObservability, {
       onFailure: (error) => {
         console.error(`Error stopping service '${serviceName}':`, error);
         managedService.status = "crashed";
@@ -154,7 +166,7 @@ export class ServiceManager implements IServiceManager {
       return Effect.fail(new Error(`Service '${serviceName}' not found`));
     }
 
-    return Effect.gen(function* () {
+    const healthCheckEffect = Effect.gen(function* () {
       // Use the adapter's Effect-based health check
       const serviceHealth = yield* managedService.adapter.healthCheck;
 
@@ -164,6 +176,13 @@ export class ServiceManager implements IServiceManager {
         status: managedService.status, // Use our managed status, not the service's
       };
     });
+
+    // Apply the service-specific observability layer if available
+    const healthCheckEffectWithObservability = managedService.observabilityLayer
+      ? healthCheckEffect.pipe(Effect.provide(managedService.observabilityLayer))
+      : healthCheckEffect;
+
+    return healthCheckEffectWithObservability;
   }
 
   public startAllServicesEffect(): Effect.Effect<void, Error> {
@@ -435,9 +454,14 @@ export class ServiceManager implements IServiceManager {
         }
       });
 
+      // Apply the service-specific observability layer if available
+      const jobEffectWithObservability = managedService.observabilityLayer
+        ? jobEffect.pipe(Effect.provide(managedService.observabilityLayer))
+        : jobEffect;
+
       // Use Effect.repeat with the schedule instead of Effect.schedule
       // This ensures the job continues repeating indefinitely
-      yield* jobEffect.pipe(
+      yield* jobEffectWithObservability.pipe(
         Effect.repeat(schedule),
         Effect.catchAllCause((cause) => {
           console.error(`Scheduled job '${name}' encountered fatal error:`, cause);
@@ -447,6 +471,6 @@ export class ServiceManager implements IServiceManager {
     });
 
     // Fork the scheduled job and store the fiber
-    managedService.scheduledJobFiber = Effect.runFork(scheduledJobEffect);
+    managedService.scheduledJobFiber = Effect.runFork(scheduledJobEffect as Effect.Effect<void, never, never>);
   }
 }

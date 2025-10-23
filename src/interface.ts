@@ -1,4 +1,4 @@
-import type { Effect, Schedule, Duration } from "effect";
+import type { Effect, Schedule, Duration, Layer } from "effect";
 
 export type ServiceStatus =
   | "stopped"
@@ -16,6 +16,7 @@ export interface HealthCheckResult {
 
 export interface IService {
   name: string;
+  observabilityLayer?: Layer.Layer<never, never, never>;
   start(): Promise<void>;
   stop(): Promise<void>;
   healthCheck(): Promise<HealthCheckResult>;
