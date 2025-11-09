@@ -60,7 +60,7 @@ describe("ServiceManager - Scheduled Jobs", () => {
     expect(health.status).toBe("stopped");
   });
 
-  it("should remove service when requested", () => {
+  it("should remove service when requested", async () => {
     // Add service with scheduled job config
     manager.addService(service, {
       scheduledJob: {
@@ -70,7 +70,7 @@ describe("ServiceManager - Scheduled Jobs", () => {
     });
 
     // Remove service
-    manager.removeService("scheduled-test");
+    await manager.removeService("scheduled-test");
 
     // Verify service was removed
     expect(manager.services.length).toBe(0);
