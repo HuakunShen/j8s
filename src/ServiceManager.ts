@@ -45,9 +45,13 @@ export class ServiceManager implements IServiceManager {
   /**
    * Create a default OTLP observability layer for a service
    */
-  private createDefaultObservabilityLayer(serviceName: string): Layer.Layer<never, never, never> {
-    const otlpBaseUrl = this.observabilityConfig?.otlpBaseUrl || "http://localhost:4318";
-    const serviceNamespace = this.observabilityConfig?.serviceNamespace || "default";
+  private createDefaultObservabilityLayer(
+    serviceName: string
+  ): Layer.Layer<never, never, never> {
+    const otlpBaseUrl =
+      this.observabilityConfig?.otlpBaseUrl || "http://localhost:4318";
+    const serviceNamespace =
+      this.observabilityConfig?.serviceNamespace || "default";
     const serviceVersion = this.observabilityConfig?.serviceVersion || "1.0.0";
     const defaultAttributes = this.observabilityConfig?.defaultAttributes || {};
 
@@ -73,7 +77,9 @@ export class ServiceManager implements IServiceManager {
    * Get the observability layer for a service
    * Priority: default layer (if enabled) > undefined
    */
-  private getObservabilityLayer(service: IService | IEffectService): Layer.Layer<never, never, never> | undefined {
+  private getObservabilityLayer(
+    service: IService | IEffectService
+  ): Layer.Layer<never, never, never> | undefined {
     // If observability is enabled in config, create default layer
     if (this.observabilityConfig?.enabled) {
       return this.createDefaultObservabilityLayer(service.name);
@@ -83,7 +89,10 @@ export class ServiceManager implements IServiceManager {
     return undefined;
   }
 
-  public addService(service: IService | IEffectService, config: ServiceConfig = {}): void {
+  public addService(
+    service: IService | IEffectService,
+    config: ServiceConfig = {}
+  ): void {
     if (this.managedServices.has(service.name)) {
       throw new Error(`Service with name '${service.name}' already exists`);
     }
@@ -116,8 +125,12 @@ export class ServiceManager implements IServiceManager {
   /**
    * Type guard to check if a service is an IEffectService
    */
-  private isEffectService(service: IService | IEffectService): service is IEffectService {
-    return 'startEffect' in service && typeof service.startEffect === 'function';
+  private isEffectService(
+    service: IService | IEffectService
+  ): service is IEffectService {
+    return (
+      "startEffect" in service && typeof service.startEffect === "function"
+    );
   }
 
   // Effect-based API methods
@@ -136,23 +149,29 @@ export class ServiceManager implements IServiceManager {
     managedService.status = "running";
 
     // Handle both IService and IEffectService adapters
-    const startEffect = managedService.adapter instanceof IEffectServiceAdapter
-      ? managedService.adapter.service.startEffect()
-      : Effect.gen(function* () {
-          yield* Effect.logInfo(`Starting service '${serviceName}'...`);
-          yield* Effect.tryPromise({
-            try: () => managedService.adapter.start(),
-            catch: (e) => (e instanceof Error ? e : new Error(String(e))),
-          });
-          yield* Effect.logInfo(`Service '${serviceName}' started successfully`);
-        }).pipe(
-          Effect.withSpan(`${serviceName}_start`, {
-            attributes: {
-              "service.name": serviceName,
-              "service.type": "promise-based",
-            },
-          })
-        );
+    const startEffect =
+      managedService.adapter instanceof IEffectServiceAdapter
+        ? managedService.adapter.service.startEffect()
+        : Effect.gen(function* () {
+            yield* Effect.logInfo(`Starting service '${serviceName}'...`);
+            yield* Effect.tryPromise({
+              try: () => managedService.adapter.start(),
+              catch: (e) => {
+                console.error(`Error starting service '${serviceName}':`, e);
+                return e instanceof Error ? e : new Error(String(e));
+              },
+            });
+            yield* Effect.logInfo(
+              `Service '${serviceName}' started successfully`
+            );
+          }).pipe(
+            Effect.withSpan(`${serviceName}_start`, {
+              attributes: {
+                "service.name": serviceName,
+                "service.type": "promise-based",
+              },
+            })
+          );
 
     // Apply the service-specific observability layer if available
     const startEffectWithObservability = managedService.observabilityLayer
@@ -207,23 +226,26 @@ export class ServiceManager implements IServiceManager {
     managedService.status = "stopping";
 
     // Handle both IService and IEffectService adapters
-    const stopEffect = managedService.adapter instanceof IEffectServiceAdapter
-      ? managedService.adapter.service.stopEffect()
-      : Effect.gen(function* () {
-          yield* Effect.logInfo(`Stopping service '${serviceName}'...`);
-          yield* Effect.tryPromise({
-            try: () => managedService.adapter.stop(),
-            catch: (e) => (e instanceof Error ? e : new Error(String(e))),
-          });
-          yield* Effect.logInfo(`Service '${serviceName}' stopped successfully`);
-        }).pipe(
-          Effect.withSpan(`${serviceName}_stop`, {
-            attributes: {
-              "service.name": serviceName,
-              "service.type": "promise-based",
-            },
-          })
-        );
+    const stopEffect =
+      managedService.adapter instanceof IEffectServiceAdapter
+        ? managedService.adapter.service.stopEffect()
+        : Effect.gen(function* () {
+            yield* Effect.logInfo(`Stopping service '${serviceName}'...`);
+            yield* Effect.tryPromise({
+              try: () => managedService.adapter.stop(),
+              catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+            });
+            yield* Effect.logInfo(
+              `Service '${serviceName}' stopped successfully`
+            );
+          }).pipe(
+            Effect.withSpan(`${serviceName}_stop`, {
+              attributes: {
+                "service.name": serviceName,
+                "service.type": "promise-based",
+              },
+            })
+          );
 
     // Apply the service-specific observability layer if available
     const stopEffectWithObservability = managedService.observabilityLayer
@@ -262,7 +284,7 @@ export class ServiceManager implements IServiceManager {
 
     // Both adapters have a healthCheck getter that returns an Effect
     const healthCheckEffect = Effect.gen(function* () {
-      const serviceHealth = yield* managedService.adapter.healthCheck
+      const serviceHealth = yield* managedService.adapter.healthCheck;
       return {
         ...serviceHealth,
         status: managedService.status, // Use our managed status, not the service's
@@ -271,7 +293,9 @@ export class ServiceManager implements IServiceManager {
 
     // Apply the service-specific observability layer if available
     const healthCheckEffectWithObservability = managedService.observabilityLayer
-      ? healthCheckEffect.pipe(Effect.provide(managedService.observabilityLayer))
+      ? healthCheckEffect.pipe(
+          Effect.provide(managedService.observabilityLayer)
+        )
       : healthCheckEffect;
 
     return healthCheckEffectWithObservability;
@@ -280,55 +304,72 @@ export class ServiceManager implements IServiceManager {
   public startAllServicesEffect(): Effect.Effect<void, Error> {
     const serviceNames = Array.from(this.managedServices.keys());
     const self = this;
-    
+
     return Effect.gen(function* () {
       // Start all services (including scheduled ones)
       const results = yield* Effect.all(
         serviceNames.map((name) =>
           self.startServiceEffect(name).pipe(
-            Effect.tap(() => Effect.logInfo(`Service '${name}' started successfully`)),
-            Effect.map(() => ({ 
-              name, 
-              success: true, 
-              error: null as Error | null 
+            Effect.tap(() =>
+              Effect.logInfo(`Service '${name}' started successfully`)
+            ),
+            Effect.map(() => ({
+              name,
+              success: true,
+              error: null as Error | null,
             })),
             Effect.catchAll((error) => {
               Effect.logError(`Service '${name}' failed to start`, error);
-              return Effect.succeed({ 
-                name, 
-                success: false, 
-                error 
+              return Effect.succeed({
+                name,
+                success: false,
+                error,
               });
             })
           )
         ),
-        { concurrency: 'unbounded' }
+        { concurrency: "unbounded" }
       );
-      
+
       // Count successful and failed services
-      const successfulServices = results.filter((r: { success: boolean }) => r.success);
-      const failedServices = results.filter((r: { success: boolean }) => !r.success);
-      
+      const successfulServices = results.filter(
+        (r: { success: boolean }) => r.success
+      );
+      const failedServices = results.filter(
+        (r: { success: boolean }) => !r.success
+      );
+
       yield* Effect.logInfo(
         `Service startup: ${successfulServices.length} successful, ${failedServices.length} failed`
       );
-      
+
       // Check if any services failed to start
       if (failedServices.length > 0) {
         const errorMessages = failedServices
-          .map((f: { name: string; error: Error | null }) => `${f.name}: ${f.error?.message || 'Unknown error'}`)
+          .map(
+            (f: { name: string; error: Error | null }) =>
+              `${f.name}: ${f.error?.message || "Unknown error"}`
+          )
           .join(", ");
-        yield* Effect.logError(`Failed to start ${failedServices.length} services: ${errorMessages}`);
-        yield* Effect.fail(new Error(`Failed to start services: ${errorMessages}`));
+        yield* Effect.logError(
+          `Failed to start ${failedServices.length} services: ${errorMessages}`
+        );
+        yield* Effect.fail(
+          new Error(`Failed to start services: ${errorMessages}`)
+        );
       }
-      
-      yield* Effect.logInfo(`All ${serviceNames.length} services initialized successfully`);
+
+      yield* Effect.logInfo(
+        `All ${serviceNames.length} services initialized successfully`
+      );
     });
   }
 
   public stopAllServicesEffect(): Effect.Effect<void, Error> {
     const serviceNames = Array.from(this.managedServices.keys());
-    const stopEffects = serviceNames.map((name) => this.stopServiceEffect(name));
+    const stopEffects = serviceNames.map((name) =>
+      this.stopServiceEffect(name)
+    );
 
     return Effect.all(stopEffects).pipe(Effect.andThen(Effect.void));
   }
@@ -401,9 +442,7 @@ export class ServiceManager implements IServiceManager {
   public async healthCheckService(
     serviceName: string
   ): Promise<HealthCheckResult> {
-    return await Effect.runPromise(
-      this.healthCheckServiceEffect(serviceName)
-    );
+    return await Effect.runPromise(this.healthCheckServiceEffect(serviceName));
   }
 
   public async startAllServices(): Promise<void> {
@@ -468,7 +507,6 @@ export class ServiceManager implements IServiceManager {
     await this.startService(name);
   }
 
-  
   private setupScheduledJob(managedService: ManagedService): void {
     if (!managedService.config.scheduledJob) return;
 
@@ -488,12 +526,13 @@ export class ServiceManager implements IServiceManager {
         managedService.status = "running";
 
         // Start the service using Effect-based approach
-        const serviceEffect = managedService.adapter instanceof IEffectServiceAdapter
-          ? managedService.adapter.service.startEffect()
-          : Effect.tryPromise({
-              try: () => managedService.adapter.start(),
-              catch: (e) => (e instanceof Error ? e : new Error(String(e))),
-            });
+        const serviceEffect =
+          managedService.adapter instanceof IEffectServiceAdapter
+            ? managedService.adapter.service.startEffect()
+            : Effect.tryPromise({
+                try: () => managedService.adapter.start(),
+                catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+              });
 
         // Apply timeout if configured - race against a sleep + fail
         const timedServiceEffect = timeout
@@ -502,7 +541,9 @@ export class ServiceManager implements IServiceManager {
               Effect.sleep(timeout).pipe(
                 Effect.andThen(
                   Effect.fail(
-                    new Error(`Service '${name}' timed out after ${Duration.toMillis(timeout)}ms`)
+                    new Error(
+                      `Service '${name}' timed out after ${Duration.toMillis(timeout)}ms`
+                    )
                   )
                 )
               )
@@ -543,13 +584,18 @@ export class ServiceManager implements IServiceManager {
       yield* jobEffectWithObservability.pipe(
         Effect.repeat(schedule),
         Effect.catchAllCause((cause) => {
-          console.error(`Scheduled job '${name}' encountered fatal error:`, cause);
+          console.error(
+            `Scheduled job '${name}' encountered fatal error:`,
+            cause
+          );
           return Effect.void;
         })
       );
     });
 
     // Fork the scheduled job and store the fiber
-    managedService.scheduledJobFiber = Effect.runFork(scheduledJobEffect as Effect.Effect<void, never, never>);
+    managedService.scheduledJobFiber = Effect.runFork(
+      scheduledJobEffect as Effect.Effect<void, never, never>
+    );
   }
 }

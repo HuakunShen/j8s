@@ -25,13 +25,30 @@ export class IServiceAdapter {
    * This maintains compatibility with existing service implementations
    */
   async start(): Promise<void> {
-    if (this.started || this.startPromise) {
-      return this.startPromise || Promise.resolve();
+    // If already started and promise exists, return the existing promise
+    if (this.started && this.startPromise) {
+      console.log("returning existing startPromise (already started)");
+      return this.startPromise;
     }
 
-    this.startPromise = this.service.start();
+    // If there's a startPromise but not marked as started, it might be in progress or rejected
+    // Create a new promise to allow restart after failure
+    this.started = false; // Reset started flag
+    this.startPromise = (async () => {
+      try {
+        await this.service.start();
+        this.started = true;
+        console.warn("service.start() completed successfully");
+      } catch (error) {
+        console.warn("service.start() failed:", error);
+        // Clear state on failure to allow restart
+        this.started = false;
+        this.startPromise = null;
+        throw error;
+      }
+    })();
+
     await this.startPromise;
-    this.started = true;
   }
 
   /**
@@ -49,16 +66,21 @@ export class IServiceAdapter {
       // Always reset state even if stop fails
       this.started = false;
       this.startPromise = null;
-      
+
       // For force-stop scenarios, we should be more lenient with certain errors
       // such as connection already closed errors
-      if (error instanceof Error &&
-          (error.message.includes("Connection closed") ||
-           error.message.includes("IllegalOperationError"))) {
-        console.warn("Ignoring connection error during service shutdown:", error.message);
+      if (
+        error instanceof Error &&
+        (error.message.includes("Connection closed") ||
+          error.message.includes("IllegalOperationError"))
+      ) {
+        console.warn(
+          "Ignoring connection error during service shutdown:",
+          error.message
+        );
         return; // Don't re-throw for connection errors during shutdown
       }
-      
+
       throw error; // Re-throw other errors to allow ServiceManager to handle
     }
 
