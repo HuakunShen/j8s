@@ -1,4 +1,5 @@
 import type { HealthCheckResult, IService } from "./interface";
+import type { Layer } from "effect";
 
 /**
  * Abstract base class for services.
@@ -6,6 +7,7 @@ import type { HealthCheckResult, IService } from "./interface";
  */
 export abstract class BaseService implements IService {
   public name: string;
+  public observabilityLayer?: Layer.Layer<never, never, never>;
 
   constructor(name: string) {
     this.name = name;

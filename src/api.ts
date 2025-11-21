@@ -5,6 +5,7 @@ import * as v from "valibot";
 import { resolver, validator as vValidator } from "hono-openapi/valibot";
 import { Scalar } from "@scalar/hono-api-reference";
 import { createServiceManagerUI } from "./ui.tsx";
+import { Effect } from "effect";
 
 // Define validation schemas
 const ServiceNameSchema = v.object(
@@ -213,14 +214,19 @@ export function createServiceManagerAPI(
         return c.json({ error: `Service '${name}' not found` }, 404);
       }
 
-      const health: HealthCheckResult =
-        await serviceManager.healthCheckService(name);
+      try {
+        const health: HealthCheckResult = await Effect.runPromise(
+          serviceManager.healthCheckServiceEffect(name)
+        );
 
-      return c.json({
-        name: service.name,
-        status: health.status,
-        health,
-      });
+        return c.json({
+          name: service.name,
+          status: health.status,
+          health,
+        });
+      } catch (error) {
+        return c.json({ error: `Failed to get service details: ${error}` }, 500);
+      }
     }
   );
 
@@ -248,7 +254,9 @@ export function createServiceManagerAPI(
     async (c) => {
       const { name } = c.req.valid("param");
       try {
-        await serviceManager.startService(name);
+        await Effect.runPromise(
+          serviceManager.startServiceEffect(name)
+        );
         return c.json({ message: `Service '${name}' started` });
       } catch (error) {
         return c.json(
@@ -283,7 +291,9 @@ export function createServiceManagerAPI(
     async (c) => {
       const { name } = c.req.valid("param");
       try {
-        await serviceManager.stopService(name);
+        await Effect.runPromise(
+          serviceManager.stopServiceEffect(name)
+        );
         return c.json({ message: `Service '${name}' stopped` });
       } catch (error) {
         return c.json(
@@ -318,7 +328,7 @@ export function createServiceManagerAPI(
     async (c) => {
       const { name } = c.req.valid("param");
       try {
-        await serviceManager.restartService(name);
+        await Effect.runPromise(serviceManager.restartServiceEffect(name));
         return c.json({ message: `Service '${name}' restarted` });
       } catch (error) {
         return c.json(
@@ -388,7 +398,9 @@ export function createServiceManagerAPI(
     async (c) => {
       const { name } = c.req.valid("param");
       try {
-        const health = await serviceManager.healthCheckService(name);
+        const health = await Effect.runPromise(
+          serviceManager.healthCheckServiceEffect(name)
+        );
         return c.json(health);
       } catch (error) {
         return c.json(
@@ -423,7 +435,9 @@ export function createServiceManagerAPI(
     }),
     async (c) => {
       try {
-        const health = await serviceManager.healthCheckAllServices();
+        const health = await Effect.runPromise(
+          serviceManager.healthCheckAllServicesEffect()
+        );
         return c.json(health);
       } catch (error) {
         return c.json(
@@ -456,7 +470,9 @@ export function createServiceManagerAPI(
     }),
     async (c) => {
       try {
-        await serviceManager.startAllServices();
+        await Effect.runPromise(
+          serviceManager.startAllServicesEffect()
+        );
         return c.json({ message: "All services started" });
       } catch (error) {
         return c.json({ error: `Failed to start all services: ${error}` }, 500);
@@ -486,7 +502,9 @@ export function createServiceManagerAPI(
     }),
     async (c) => {
       try {
-        await serviceManager.stopAllServices();
+        await Effect.runPromise(
+          serviceManager.stopAllServicesEffect()
+        );
         return c.json({ message: "All services stopped" });
       } catch (error) {
         return c.json({ error: `Failed to stop all services: ${error}` }, 500);

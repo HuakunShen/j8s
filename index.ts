@@ -50,8 +50,8 @@
  *
  * @example
  * ```ts
- * // Running a service as a cron job
- * import { BaseService, ServiceManager } from "j8s";
+ * // Running a service on a schedule
+ * import { BaseService, ServiceManager, Schedule, Duration } from "effect";
  *
  * class BackupService extends BaseService {
  *   async start(): Promise<void> {
@@ -70,9 +70,9 @@
  * const backupService = new BackupService("backup-service");
  *
  * manager.addService(backupService, {
- *   cronJob: {
- *     schedule: "0 0 * * *", // Run at midnight every day
- *     timeout: 60000, // 1 minute timeout
+ *   scheduledJob: {
+ *     schedule: Schedule.cron("0 0 * * *"), // Run at midnight every day
+ *     timeout: Duration.seconds(60), // 1 minute timeout
  *   },
  * });
  * ```
@@ -121,15 +121,18 @@ export type {
   RestartPolicy,
   HealthCheckResult,
   IService,
-  CronJobConfig,
+  ScheduledJobConfig,
   ServiceConfig,
   IServiceManager,
+  ObservabilityConfig,
+  ServiceManagerConfig,
 } from "./src/interface";
 
 /**
  * Base class for all services.
  */
 export { BaseService } from "./src/BaseService";
+export { IEffectServiceAdapter } from "./src/IEffectServiceAdapter";
 
 /**
  * Service manager for managing all services.
@@ -147,11 +150,60 @@ export { WorkerService } from "./src/WorkerService";
 export type { WorkerServiceOptions } from "./src/WorkerService";
 
 /**
+ * Node.js worker_threads compatible IO adapters for kkrpc
+ */
+export { NodeWorkerParentIO, NodeWorkerChildIO } from "./src/NodeWorkerIO";
+
+/**
+ * Runtime detection utilities
+ */
+export { isNode, isBun, isDeno, getRuntime } from "./src/runtime";
+
+/**
  * Exposes a service implementation in a worker thread.
  * This function handles all the boilerplate code needed to expose a service
  * implementation through RPC to the main thread.
  */
 export { expose } from "./src/expose";
+
+// Enhanced Effect integration exports
+export { EnhancedServiceAdapter } from "./src/EnhancedServiceAdapter";
+
+/**
+ * Effect-based service interface and base class
+ */
+export type { IEffectService } from "./src/IEffectService";
+export { BaseEffectService, DatabaseEffectService } from "./src/IEffectService";
+
+/**
+ * Error handling utilities
+ */
+export {
+  ServiceErrorType,
+  StructuredServiceError,
+  ServiceErrorHandling,
+} from "./src/errors";
+
+/**
+ * Effect utilities for retry policies, resource management, concurrency control, and monitoring
+ */
+export {
+  RetryPolicies,
+  ResourceManager,
+  Concurrency,
+  Monitoring,
+} from "./src/EffectUtils";
+
+/**
+ * Enhanced service manager that fully leverages Effect's capabilities
+ */
+export { EnhancedServiceManager } from "./src/EnhancedServiceManager";
+
+/**
+ * Web UI and API exports
+ */
+export { createServiceManagerUI } from "./src/ui";
+export { createServiceManagerAPI } from "./src/api";
 
 // Create a helper to create a worker-based service
 import { WorkerService, type WorkerServiceOptions } from "./src/WorkerService";
