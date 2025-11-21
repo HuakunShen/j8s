@@ -306,9 +306,25 @@ export class ServiceManager implements IServiceManager {
     const self = this;
 
     return Effect.gen(function* () {
-      // Start all services (including scheduled ones)
+      // Filter out services with scheduled jobs - they start automatically via scheduled job fiber
+      const manualStartServices = serviceNames.filter((name) => {
+        const managed = self.managedServices.get(name);
+        return !managed?.config.scheduledJob;
+      });
+
+      const scheduledServices = serviceNames.filter((name) => {
+        const managed = self.managedServices.get(name);
+        return !!managed?.config.scheduledJob;
+      });
+
+      yield* Effect.logInfo(
+        `Starting ${manualStartServices.length} manual services and ` +
+          `${scheduledServices.length} scheduled services (auto-start)`
+      );
+
+      // Only start manual services (scheduled services start automatically via their scheduled job fiber)
       const results = yield* Effect.all(
-        serviceNames.map((name) =>
+        manualStartServices.map((name) =>
           self.startServiceEffect(name).pipe(
             Effect.tap(() =>
               Effect.logInfo(`Service '${name}' started successfully`)
